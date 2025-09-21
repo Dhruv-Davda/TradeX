@@ -105,13 +105,23 @@ export const Analytics: React.FC = () => {
     const buyTrades = filteredTrades.filter(t => t.type === 'buy');
     const sellTrades = filteredTrades.filter(t => t.type === 'sell');
     const transferTrades = filteredTrades.filter(t => t.type === 'transfer');
+    const settlementTrades = filteredTrades.filter(t => t.type === 'settlement');
     
     const totalPurchases = buyTrades.reduce((sum, t) => sum + Number(t.totalAmount), 0);
     const totalSales = sellTrades.reduce((sum, t) => sum + Number(t.totalAmount), 0);
     const totalTransferCharges = transferTrades.reduce((sum, t) => sum + Number(t.transferCharges || 0), 0);
+    
+    // Calculate net settlements impact on gross profit
+    const settlementImpact = settlementTrades.reduce((sum, t) => {
+      const amount = Number(t.totalAmount || 0);
+      // If receiving settlement (customer pays us), it's positive for gross profit
+      // If paying settlement (we pay customer), it's negative for gross profit
+      return sum + (t.settlementDirection === 'receiving' ? amount : -amount);
+    }, 0);
+    
     const totalExpenses = filteredExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
     const totalIncome = filteredIncome.reduce((sum, i) => sum + Number(i.amount), 0);
-    const grossProfit = Number(totalSales) - Number(totalPurchases) + Number(totalTransferCharges);
+    const grossProfit = Number(totalSales) - Number(totalPurchases) + Number(totalTransferCharges) + Number(settlementImpact);
     const netProfit = Number(grossProfit) - Number(totalExpenses) + Number(totalIncome);
 
     // Monthly data for the last 12 months
@@ -141,6 +151,13 @@ export const Analytics: React.FC = () => {
       const sales = monthTrades.filter(t => t.type === 'sell').reduce((sum, t) => sum + Number(t.totalAmount), 0);
       const purchases = monthTrades.filter(t => t.type === 'buy').reduce((sum, t) => sum + Number(t.totalAmount), 0);
       const transferCharges = monthTrades.filter(t => t.type === 'transfer').reduce((sum, t) => sum + Number(t.transferCharges || 0), 0);
+      
+      // Calculate settlements impact for this month
+      const monthSettlementImpact = monthTrades.filter(t => t.type === 'settlement').reduce((sum, t) => {
+        const amount = Number(t.totalAmount || 0);
+        return sum + (t.settlementDirection === 'receiving' ? amount : -amount);
+      }, 0);
+      
       const expenseAmount = monthExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
       const incomeAmount = monthIncome.reduce((sum, i) => sum + Number(i.amount), 0);
 
@@ -149,9 +166,10 @@ export const Analytics: React.FC = () => {
         sales,
         purchases,
         transferCharges,
+        settlementImpact: monthSettlementImpact,
         expenses: expenseAmount,
         income: incomeAmount,
-        profit: sales - purchases + transferCharges - expenseAmount + incomeAmount,
+        profit: sales - purchases + transferCharges + monthSettlementImpact - expenseAmount + incomeAmount,
       };
     });
 

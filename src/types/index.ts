@@ -42,7 +42,7 @@ export interface Trade {
   dropLocation?: string;
   transferCharges?: number;
   notes?: string;
-  tradeDate?: Date;
+  tradeDate?: string;
   createdAt: Date;
   updatedAt: Date;
   // Additional properties used in the code

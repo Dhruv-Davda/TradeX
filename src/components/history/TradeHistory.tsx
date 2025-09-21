@@ -169,31 +169,20 @@ export const TradeHistory: React.FC = () => {
   };
 
   const filteredAndSortedTrades = useMemo(() => {
-    console.log('🔍 Processing trades:', trades);
-    console.log('🔍 Trades type:', typeof trades);
-    console.log('🔍 Is array:', Array.isArray(trades));
-    
     try {
       // Ensure trades is an array
       if (!Array.isArray(trades)) {
-        console.error('❌ Trades is not an array:', trades);
         return [];
       }
 
       if (trades.length === 0) {
-        console.log('ℹ️ No trades found');
         return [];
       }
 
-      console.log('✅ Processing', trades.length, 'trades');
-
       let filtered = trades.filter((trade, index) => {
         try {
-          console.log(`🔍 Processing trade ${index}:`, trade);
-          
           // Ensure trade has required properties
           if (!trade || typeof trade !== 'object') {
-            console.warn(`❌ Invalid trade object at index ${index}:`, trade);
             return false;
           }
 
@@ -204,32 +193,33 @@ export const TradeHistory: React.FC = () => {
           const tradeType = trade.type || tradeAny.transactionType || 'unknown';
           const metalType = trade.metalType || tradeAny.metal || '';
 
-          console.log(`📊 Trade ${index} data:`, {
-            merchantName,
-            notes,
-            tradeType,
-            metalType,
-            searchTerm,
-            filterType,
-            filterMetal
-          });
-
           const matchesSearch = merchantName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                                notes.toLowerCase().includes(searchTerm.toLowerCase());
-          const matchesType = filterType.includes('all') || filterType.includes(tradeType);
+          
+          // Handle special settlement type filters (cash, bill)
+          let matchesType = filterType.includes('all') || filterType.includes(tradeType);
+          
+          if (filterType.includes('cash') && !matchesType) {
+            // Check if this trade has cash settlement type
+            const settlementType = trade.settlementType || tradeAny.settlementType;
+            matchesType = settlementType === 'cash';
+          }
+          
+          if (filterType.includes('bill') && !matchesType) {
+            // Check if this trade has bill settlement type
+            const settlementType = trade.settlementType || tradeAny.settlementType;
+            matchesType = settlementType === 'bill';
+          }
+          
           const matchesMetal = filterMetal === 'all' || metalType === filterMetal;
           
           const shouldInclude = matchesSearch && matchesType && matchesMetal;
-          console.log(`✅ Trade ${index} included:`, shouldInclude);
           
           return shouldInclude;
         } catch (error) {
-          console.error(`❌ Error filtering trade ${index}:`, error, trade);
           return false;
         }
       });
-
-      console.log('✅ Filtered trades:', filtered.length);
 
       // Sort trades
       filtered.sort((a, b) => {
@@ -259,10 +249,8 @@ export const TradeHistory: React.FC = () => {
         }
       });
 
-      console.log('✅ Final filtered trades:', filtered);
       return filtered;
     } catch (error) {
-      console.error('❌ Error in filteredAndSortedTrades:', error);
       return [];
     }
   }, [trades, searchTerm, filterType, filterMetal, sortBy]);
@@ -384,13 +372,6 @@ export const TradeHistory: React.FC = () => {
           </p>
         </div>
 
-        {/* Debug info */}
-        {!Array.isArray(trades) && (
-          <Card className="p-4 bg-yellow-500/10 border border-yellow-500/30">
-            <p className="text-yellow-400">Warning: Trades data is not in expected format</p>
-            <p className="text-sm text-yellow-300 mt-1">Data: {JSON.stringify(trades)}</p>
-          </Card>
-        )}
 
         {filteredAndSortedTrades.length > 0 ? (
           <div className="space-y-3">
@@ -399,10 +380,7 @@ export const TradeHistory: React.FC = () => {
                 // Generate a key if id is missing
                 const tradeKey = trade?.id || `trade-${index}`;
                 
-                // Log the trade structure for debugging
-                console.log(`🎨 Rendering trade ${index}:`, trade);
-                console.log(`🎨 Trade type:`, typeof trade);
-                console.log(`🎨 Trade keys:`, trade ? Object.keys(trade) : 'null');
+                // Generate trade key for React rendering
 
                 if (!trade) {
                   console.warn(`❌ Invalid trade in render ${index}:`, trade);
@@ -425,9 +403,16 @@ export const TradeHistory: React.FC = () => {
                           <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getTradeTypeColor(trade.type || tradeAny.transactionType || 'unknown')}`}>
                             {(trade.type || tradeAny.transactionType || 'UNKNOWN').toUpperCase()}
                           </span>
-                          {(trade.metalType || tradeAny.metal) && (
+                          {/* Show metal type badge only for Buy/Sell trades, or for Settlement if it's a metal settlement */}
+                          {((trade.type === 'buy' || trade.type === 'sell') && (trade.metalType || tradeAny.metal)) && (
                             <span className="px-2 py-1 bg-gray-700 text-gray-300 rounded-full text-xs">
                               {(trade.metalType || tradeAny.metal).toUpperCase()}
+                            </span>
+                          )}
+                          {/* For settlements, show settlement type instead of metal type */}
+                          {trade.type === 'settlement' && (
+                            <span className="px-2 py-1 bg-gray-700 text-gray-300 rounded-full text-xs">
+                              {(trade.settlementType || tradeAny.settlementType || 'CASH').toUpperCase()}
                             </span>
                           )}
                           <span className="text-xs text-gray-500">
@@ -442,18 +427,77 @@ export const TradeHistory: React.FC = () => {
                             <p className="text-white font-medium">{trade.merchantName || tradeAny.merchant || tradeAny.customerName || 'Unknown'}</p>
                           </div>
                           
-                          {(trade.weight || tradeAny.quantity) && (trade.metalType || tradeAny.metal) && (
-                            <div>
-                              <span className="text-gray-400">Weight:</span>
-                              <p className="text-white">{formatWeight(trade.weight || tradeAny.quantity, (trade.metalType || tradeAny.metal) as 'gold' | 'silver')}</p>
-                            </div>
+                          {/* Settlement specific details */}
+                          {trade.type === 'settlement' && (
+                            <>
+                              <div>
+                                <span className="text-gray-400">Settlement Type:</span>
+                                <p className="text-white font-medium capitalize">{trade.settlementType || tradeAny.settlementType || 'Unknown'}</p>
+                              </div>
+                              <div>
+                                <span className="text-gray-400">Direction:</span>
+                                <p className={`font-medium ${trade.settlementDirection === 'receiving' ? 'text-green-400' : 'text-orange-400'}`}>
+                                  {trade.settlementDirection === 'receiving' ? 'Receiving' : 'Paying'}
+                                </p>
+                              </div>
+                            </>
                           )}
                           
-                          {(trade.pricePerUnit || tradeAny.price || tradeAny.rate) && (
-                            <div>
-                              <span className="text-gray-400">Price per Unit:</span>
-                              <p className="text-white">{formatCurrency(trade.pricePerUnit || tradeAny.price || tradeAny.rate)}</p>
-                            </div>
+                          {/* Buy/Sell specific details */}
+                          {(trade.type === 'buy' || trade.type === 'sell') && (
+                            <>
+                              {(trade.weight || tradeAny.quantity) && (trade.metalType || tradeAny.metal) && (
+                                <div>
+                                  <span className="text-gray-400">Weight:</span>
+                                  <p className="text-white">{formatWeight(trade.weight || tradeAny.quantity, (trade.metalType || tradeAny.metal) as 'gold' | 'silver')}</p>
+                                </div>
+                              )}
+                              
+                              {(trade.pricePerUnit || tradeAny.price || tradeAny.rate) && (
+                                <div>
+                                  <span className="text-gray-400">Price per Unit:</span>
+                                  <p className="text-white">{formatCurrency(trade.pricePerUnit || tradeAny.price || tradeAny.rate)}</p>
+                                </div>
+                              )}
+                              
+                              {trade.type === 'buy' && (trade.amountPaid !== undefined && trade.amountPaid !== null) && (
+                                <div>
+                                  <span className="text-gray-400">Amount Paid:</span>
+                                  <p className="text-white">{formatCurrency(trade.amountPaid)}</p>
+                                </div>
+                              )}
+                              
+                              {trade.type === 'sell' && (trade.amountReceived !== undefined && trade.amountReceived !== null) && (
+                                <div>
+                                  <span className="text-gray-400">Amount Received:</span>
+                                  <p className="text-white">{formatCurrency(trade.amountReceived)}</p>
+                                </div>
+                              )}
+                            </>
+                          )}
+                          
+                          {/* Transfer specific details */}
+                          {trade.type === 'transfer' && (
+                            <>
+                              {trade.pickupLocation && (
+                                <div>
+                                  <span className="text-gray-400">Pickup:</span>
+                                  <p className="text-white text-xs">{trade.pickupLocation}</p>
+                                </div>
+                              )}
+                              {trade.dropLocation && (
+                                <div>
+                                  <span className="text-gray-400">Drop:</span>
+                                  <p className="text-white text-xs">{trade.dropLocation}</p>
+                                </div>
+                              )}
+                              {trade.transferCharges && (
+                                <div>
+                                  <span className="text-gray-400">Transfer Charges:</span>
+                                  <p className="text-white">{formatCurrency(trade.transferCharges)}</p>
+                                </div>
+                              )}
+                            </>
                           )}
                           
                           <div>

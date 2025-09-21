@@ -20,6 +20,7 @@ interface SellFormData {
   laborCharges: number;
   amountReceived: number;
   settlementType: 'bill' | 'cash';
+  tradeDate: string;
   notes?: string;
 }
 
@@ -70,6 +71,7 @@ export const Sell: React.FC = () => {
       settlementType: 'cash',
       laborCharges: 0,
       amountReceived: 0,
+      tradeDate: new Date().toISOString().split('T')[0],
     }
   });
 
@@ -103,6 +105,7 @@ export const Sell: React.FC = () => {
       amountReceived: data.amountReceived,
       laborCharges: data.laborCharges,
       settlementType: data.settlementType as any,
+      tradeDate: data.tradeDate,
       notes: data.notes,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -233,6 +236,13 @@ export const Sell: React.FC = () => {
               {...register('settlementType')}
             />
           </div>
+
+          <Input
+            label="Trade Date"
+            type="date"
+            {...register('tradeDate', { required: 'Trade date is required' })}
+            error={errors.tradeDate?.message}
+          />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input

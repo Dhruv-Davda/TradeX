@@ -21,6 +21,7 @@ interface SettlementFormData {
   weight?: number;
   rate?: number;
   amount: number;
+  tradeDate: string;
   notes?: string;
 }
 
@@ -67,6 +68,7 @@ export const Settlement: React.FC = () => {
   const { register, handleSubmit, watch, reset, setValue, formState: { errors } } = useForm<SettlementFormData>({
     defaultValues: {
       settlementType: 'cash',
+      tradeDate: new Date().toISOString().split('T')[0],
     }
   });
 
@@ -120,6 +122,7 @@ export const Settlement: React.FC = () => {
       totalAmount: data.amount,
       settlementType: data.settlementType,
       settlementDirection: data.settlementDirection,
+      tradeDate: data.tradeDate,
       notes: data.notes,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -260,6 +263,13 @@ export const Settlement: React.FC = () => {
             ]}
             {...register('settlementDirection', { required: 'Please select settlement direction' })}
             error={errors.settlementDirection?.message}
+          />
+
+          <Input
+            label="Settlement Date"
+            type="date"
+            {...register('tradeDate', { required: 'Settlement date is required' })}
+            error={errors.tradeDate?.message}
           />
 
           {isMetalSettlement ? (

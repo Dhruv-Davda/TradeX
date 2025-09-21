@@ -6,7 +6,7 @@ export const calculateMerchantBalance = (merchantId: string, trades: Trade[], me
   let due = merchantTotalDue; // Start with older dues from merchant
   let owe = 0;
   
-
+  // Process trades in chronological order
   merchantTrades.forEach((trade, index) => {
     switch (trade.type) {
       case 'buy':
@@ -20,21 +20,38 @@ export const calculateMerchantBalance = (merchantId: string, trades: Trade[], me
         // Reduce due by amount received (only if amountReceived is provided)
         if (trade.amountReceived !== undefined) {
           due -= trade.amountReceived;
+          // If due becomes negative (overpayment), convert excess to owe
+          if (due < 0) {
+            owe += Math.abs(due); // We owe them the excess amount
+            due = 0; // Reset due to 0
+          }
         }
         break;
       case 'settlement':
         if (trade.settlementDirection === 'receiving') {
-          // Receiving settlement: reduce what others owe you (reduce due)
-          due -= trade.totalAmount;
+          // Receiving settlement: customer pays us money
+          // This reduces what they owe us (due) and if they overpay, we owe them
+          if (due > 0) {
+            const excess = trade.totalAmount - due;
+            due = Math.max(0, due - trade.totalAmount);
+            if (excess > 0) {
+              owe += excess; // We owe them the excess amount
+            }
+          } else {
+            // No existing dues, so this payment becomes what we owe them
+            owe += trade.totalAmount;
+          }
         } else if (trade.settlementDirection === 'paying') {
-          // Paying settlement: reduce what you owe others (reduce owe)
-          owe -= trade.totalAmount;
+          // Paying settlement: we pay customer money in advance
+          // This increases what they owe us (due amount) - they owe us back the advance
+          due += trade.totalAmount;
         }
         break;
     }
   });
 
   // Net-off logic: offset dues and owes against each other
+  // This is necessary to handle cases where someone owes us and we owe them
   if (due > 0 && owe > 0) {
     if (due >= owe) {
       // If due amount is greater than or equal to owe amount
@@ -47,8 +64,8 @@ export const calculateMerchantBalance = (merchantId: string, trades: Trade[], me
     }
   }
 
-  const result = { due: Math.max(0, due), owe: Math.max(0, owe) };
-  return result;
+  // Final result
+  return { due: Math.max(0, due), owe: Math.max(0, owe) };
 };
 
 export const formatCurrency = (amount: number): string => {

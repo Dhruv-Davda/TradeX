@@ -18,6 +18,7 @@ interface TransferFormData {
   dropLocation: string;
   totalAmount: number;
   transferCharges: number;
+  tradeDate: string;
   notes?: string;
 }
 
@@ -64,6 +65,7 @@ export const Transfer: React.FC = () => {
   const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<TransferFormData>({
     defaultValues: {
       transferCharges: 0,
+      tradeDate: new Date().toISOString().split('T')[0],
     }
   });
 
@@ -92,6 +94,7 @@ export const Transfer: React.FC = () => {
       pickupLocation: data.pickupLocation,
       dropLocation: data.dropLocation,
       transferCharges: data.transferCharges,
+      tradeDate: data.tradeDate,
       notes: data.notes,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -197,6 +200,13 @@ export const Transfer: React.FC = () => {
               <Plus className="w-4 h-4" />
             </Button>
           </div>
+
+          <Input
+            label="Transfer Date"
+            type="date"
+            {...register('tradeDate', { required: 'Transfer date is required' })}
+            error={errors.tradeDate?.message}
+          />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
