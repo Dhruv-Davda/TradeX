@@ -5,6 +5,7 @@ export const calculateMerchantBalance = (merchantId: string, trades: Trade[], me
   
   let due = merchantTotalDue; // Start with older dues from merchant
   let owe = 0;
+  
 
   merchantTrades.forEach((trade, index) => {
     switch (trade.type) {
@@ -46,7 +47,8 @@ export const calculateMerchantBalance = (merchantId: string, trades: Trade[], me
     }
   }
 
-  return { due: Math.max(0, due), owe: Math.max(0, owe) };
+  const result = { due: Math.max(0, due), owe: Math.max(0, owe) };
+  return result;
 };
 
 export const formatCurrency = (amount: number): string => {

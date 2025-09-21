@@ -20,14 +20,12 @@ export const Merchants: React.FC = () => {
   // Load merchants and trades from database
   const loadAllData = async () => {
     try {
-      console.log('📊 Merchants: Loading merchants and trades from database...');
       
       // Load merchants
       const { merchants: dbMerchants, error: merchantsError } = await MerchantsService.getMerchants();
       if (merchantsError) {
         console.error('❌ Merchants: Error loading merchants:', merchantsError);
       } else {
-        console.log('✅ Merchants: Loaded', dbMerchants.length, 'merchants from database');
         setMerchants(dbMerchants);
       }
 
@@ -36,8 +34,6 @@ export const Merchants: React.FC = () => {
       if (tradesError) {
         console.error('❌ Merchants: Error loading trades:', tradesError);
       } else {
-        console.log('✅ Merchants: Loaded', dbTrades.length, 'trades from database');
-        console.log('🔍 Merchants: Sample trades:', dbTrades.slice(0, 3));
         setTrades(dbTrades);
       }
     } catch (error) {
@@ -54,7 +50,6 @@ export const Merchants: React.FC = () => {
   // Refresh data when page comes into focus
   React.useEffect(() => {
     const handleFocus = () => {
-      console.log('🔄 Merchants: Page focused, refreshing data...');
       loadAllData();
     };
 
@@ -64,9 +59,11 @@ export const Merchants: React.FC = () => {
 
   // Sort merchants by priority (due + owe) in decreasing order
   const sortedMerchants = useMemo(() => {
-    if (!merchants.length || !trades.length) return merchants;
+    if (!merchants.length) {
+      return merchants;
+    }
     
-    return [...merchants].sort((a, b) => {
+    const sorted = [...merchants].sort((a, b) => {
       const balanceA = calculateMerchantBalance(a.id, trades, a.totalDue);
       const balanceB = calculateMerchantBalance(b.id, trades, b.totalDue);
       
@@ -74,9 +71,12 @@ export const Merchants: React.FC = () => {
       const priorityA = balanceA.due + balanceA.owe;
       const priorityB = balanceB.due + balanceB.owe;
       
+      
       // Sort in decreasing order (highest priority first)
       return priorityB - priorityA;
     });
+    
+    return sorted;
   }, [merchants, trades]);
   const [formData, setFormData] = useState({
     name: '',
@@ -104,7 +104,6 @@ export const Merchants: React.FC = () => {
         updatedAt: new Date(),
       };
 
-      console.log('📝 Updating merchant in database:', updatedMerchantData);
       
       try {
         const { merchant: savedMerchant, error } = await MerchantsService.updateMerchant(updatedMerchantData);
@@ -114,7 +113,6 @@ export const Merchants: React.FC = () => {
           return;
         }
         
-        console.log('✅ Merchant updated successfully:', savedMerchant);
         
         // Update local state for immediate UI update
         const updatedMerchants = merchants.map(merchant =>
@@ -150,10 +148,14 @@ export const Merchants: React.FC = () => {
           return;
         }
         
-        console.log('✅ Merchant added successfully:', savedMerchant);
         
         // Update local state for immediate UI update
         setMerchants([...merchants, savedMerchant!]);
+        
+        // Also reload data from database to ensure consistency
+        setTimeout(() => {
+          loadAllData();
+        }, 100);
       } catch (error) {
         console.error('❌ Unexpected error adding merchant:', error);
         alert('Unexpected error adding merchant');
@@ -191,7 +193,6 @@ export const Merchants: React.FC = () => {
     }
 
     if (window.confirm('Are you sure you want to delete this merchant?')) {
-      console.log('🗑️ Deleting merchant from database');
       
       try {
         const { success, error } = await MerchantsService.deleteMerchant(merchantId);
@@ -201,7 +202,6 @@ export const Merchants: React.FC = () => {
           return;
         }
         
-        console.log('✅ Merchant deleted successfully');
         
         // Update local state for immediate UI update
         setMerchants(merchants.filter(merchant => merchant.id !== merchantId));
@@ -310,20 +310,13 @@ export const Merchants: React.FC = () => {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-white">Merchants</h2>
-            <p className="text-sm text-gray-400">Sorted by priority (due + owe)</p>
+            <p className="text-sm text-gray-400">Sorted by priority (due + owe) - {sortedMerchants.length} merchants</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {sortedMerchants.map((merchant, index) => {
             const balance = calculateMerchantBalance(merchant.id, trades, merchant.totalDue);
             const merchantTradeCount = trades.filter(trade => trade.merchantId === merchant.id).length;
             
-            // Debug logging for first merchant
-            if (index === 0) {
-              console.log('🔍 Merchants: Debug for merchant:', merchant.name);
-              console.log('🔍 Merchants: Processing merchant');
-              console.log('🔍 Merchants: Trades for this merchant');
-              console.log('🔍 Merchants: Calculated balance:', balance);
-            }
             
             return (
               <motion.div
