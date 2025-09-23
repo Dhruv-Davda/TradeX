@@ -1,38 +1,35 @@
-// Local storage utilities for data persistence
-const STORAGE_KEYS = {
-  USER: 'trade_app_user',
-  MERCHANTS: 'trade_app_merchants',
-  TRADES: 'trade_app_trades',
-  EXPENSES: 'trade_app_expenses',
-  INCOME: 'trade_app_income',
-  STOCK: 'trade_app_stock',
-};
+// Simple localStorage wrapper used by DataMigration
+
+export const STORAGE_KEYS = {
+  TRADES: 'trades',
+} as const;
+
+function safeParse<T>(raw: string | null): T | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
 
 export const storage = {
-  get: <T>(key: string): T | null => {
-    try {
-      const item = localStorage.getItem(key);
-      return item ? JSON.parse(item) : null;
-    } catch {
-      return null;
-    }
+  get<T = unknown>(key: string): T | null {
+    if (typeof window === 'undefined') return null;
+    return safeParse<T>(window.localStorage.getItem(key));
   },
-
-  set: <T>(key: string, value: T): void => {
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-    } catch (error) {
-      console.error('Failed to save to localStorage:', error);
-    }
+  set<T = unknown>(key: string, value: T): void {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(key, JSON.stringify(value));
   },
-
-  remove: (key: string): void => {
-    localStorage.removeItem(key);
+  remove(key: string): void {
+    if (typeof window === 'undefined') return;
+    window.localStorage.removeItem(key);
   },
-
-  clear: (): void => {
-    Object.values(STORAGE_KEYS).forEach(key => localStorage.removeItem(key));
+  clear(): void {
+    if (typeof window === 'undefined') return;
+    window.localStorage.clear();
   },
 };
 
-export { STORAGE_KEYS };
+

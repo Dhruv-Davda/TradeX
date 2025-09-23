@@ -11,8 +11,14 @@ export const calculateMerchantBalance = (merchantId: string, trades: Trade[], me
     switch (trade.type) {
       case 'buy':
         if (trade.amountPaid !== undefined && trade.totalAmount) {
-          const remaining = trade.totalAmount - trade.amountPaid;
-          if (remaining > 0) owe += remaining;
+          const difference = trade.amountPaid - trade.totalAmount;
+          if (difference < 0) {
+            // We paid less than total -> we owe them the remaining
+            owe += Math.abs(difference);
+          } else if (difference > 0) {
+            // We overpaid -> they owe us the excess (advance)
+            due += difference;
+          }
         }
         break;
       case 'sell':
@@ -107,7 +113,7 @@ export const formatCurrencyInCR = (amount: number): string => {
 export const formatWeight = (weight: number | string | undefined, metalType: 'gold' | 'silver'): string => {
   const unit = metalType === 'gold' ? 'g' : 'kg';
   const numericWeight = Number(weight) || 0;
-  return `${numericWeight.toFixed(2)} ${unit}`;
+  return `${numericWeight.toFixed(3)} ${unit}`;
 };
 
 export const generateId = (): string => {

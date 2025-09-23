@@ -278,11 +278,11 @@ export const Settlement: React.FC = () => {
                 <Input
                   label={`Weight (${watchedValues.settlementType === 'gold' ? 'grams' : 'kg'})`}
                   type="number"
-                  step="0.01"
-                  placeholder="0.00"
+                  step="0.001"
+                  placeholder="0.000"
                   {...register('weight', { 
                     required: 'Weight is required for metal settlement',
-                    min: { value: 0.01, message: 'Weight must be greater than 0' }
+                    min: { value: 0.001, message: 'Weight must be greater than 0' }
                   })}
                   error={errors.weight?.message}
                 />
