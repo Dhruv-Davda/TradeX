@@ -1,13 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Users, Plus, Edit, Trash2, Phone, Mail, MapPin, Search, History, CalendarDays, X } from 'lucide-react';
-import { format } from 'date-fns';
+import { Users, Plus, Edit, Trash2, Phone, Mail, MapPin } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import { Merchant, Trade } from '../../types';
-import { formatCurrency, calculateMerchantBalance, calculateTradesWithBalance, TradeWithBalance } from '../../utils/calculations';
+import { generateId, formatCurrency, calculateMerchantBalance } from '../../utils/calculations';
 import { TradeService } from '../../services/tradeService';
 import { MerchantsService } from '../../services/merchantsService';
 
@@ -17,14 +16,6 @@ export const Merchants: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingMerchant, setEditingMerchant] = useState<Merchant | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedMerchant, setSelectedMerchant] = useState<Merchant | null>(null);
-  const [showMerchantDetailsModal, setShowMerchantDetailsModal] = useState(false);
-  const [showTradeHistoryView, setShowTradeHistoryView] = useState(false);
-  const [dateRange, setDateRange] = useState({
-    startDate: '',
-    endDate: ''
-  });
 
   // Load merchants and trades from database
   const loadAllData = async () => {
@@ -73,8 +64,8 @@ export const Merchants: React.FC = () => {
     }
     
     const sorted = [...merchants].sort((a, b) => {
-      const balanceA = calculateMerchantBalance(a.id, trades, a.totalDue, a.totalOwe);
-      const balanceB = calculateMerchantBalance(b.id, trades, b.totalDue, b.totalOwe);
+      const balanceA = calculateMerchantBalance(a.id, trades, a.totalDue);
+      const balanceB = calculateMerchantBalance(b.id, trades, b.totalDue);
       
       // Calculate priority: due + owe (higher priority = higher amount)
       const priorityA = balanceA.due + balanceA.owe;
@@ -87,65 +78,6 @@ export const Merchants: React.FC = () => {
     
     return sorted;
   }, [merchants, trades]);
-
-  // Filter merchants based on search query
-  const filteredMerchants = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return sortedMerchants;
-    }
-    
-    const query = searchQuery.toLowerCase();
-    return sortedMerchants.filter(merchant => 
-      merchant.name.toLowerCase().includes(query) ||
-      merchant.email?.toLowerCase().includes(query) ||
-      merchant.phone?.toLowerCase().includes(query) ||
-      merchant.address?.toLowerCase().includes(query)
-    );
-  }, [sortedMerchants, searchQuery]);
-
-  // Get trades for selected merchant with dues/advances calculated
-  const selectedMerchantTrades = useMemo(() => {
-    if (!selectedMerchant) return [];
-    
-    // Calculate trades with balance starting from merchant's initial balance
-    const tradesWithBalance = calculateTradesWithBalance(
-      selectedMerchant.id,
-      selectedMerchant.totalDue || 0, // Initial due from merchants table
-      selectedMerchant.totalOwe || 0, // Initial advance from merchants table
-      trades,
-      dateRange.startDate && dateRange.endDate ? dateRange : null
-    );
-    
-    return tradesWithBalance;
-  }, [trades, selectedMerchant, dateRange]);
-
-  const handleMerchantClick = (merchant: Merchant) => {
-    setSelectedMerchant(merchant);
-    setShowTradeHistoryView(false);
-    setShowMerchantDetailsModal(true);
-  };
-
-  const handleViewTradeHistory = () => {
-    setShowTradeHistoryView(true);
-    // Reset date range when opening view
-    setDateRange({ startDate: '', endDate: '' });
-  };
-
-  const closeMerchantDetailsModal = () => {
-    setShowMerchantDetailsModal(false);
-    setSelectedMerchant(null);
-    setShowTradeHistoryView(false);
-    setDateRange({ startDate: '', endDate: '' });
-  };
-
-  const handleClearDateRange = () => {
-    setDateRange({ startDate: '', endDate: '' });
-  };
-
-  const handleBackToMerchantDetails = () => {
-    setShowTradeHistoryView(false);
-    setDateRange({ startDate: '', endDate: '' });
-  };
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -263,7 +195,7 @@ export const Merchants: React.FC = () => {
     if (window.confirm('Are you sure you want to delete this merchant?')) {
       
       try {
-        const { error } = await MerchantsService.deleteMerchant(merchantId);
+        const { success, error } = await MerchantsService.deleteMerchant(merchantId);
         if (error) {
           console.error('❌ Error deleting merchant:', error);
           alert('Error deleting merchant: ' + error);
@@ -341,7 +273,7 @@ export const Merchants: React.FC = () => {
               <p className="text-xl font-bold text-green-400">
                 {formatCurrency(
                   merchants.reduce((sum, merchant) => {
-                    const balance = calculateMerchantBalance(merchant.id, trades, merchant.totalDue, merchant.totalOwe);
+                    const balance = calculateMerchantBalance(merchant.id, trades, merchant.totalDue);
                     return sum + balance.due;
                   }, 0)
                 )}
@@ -360,7 +292,7 @@ export const Merchants: React.FC = () => {
               <p className="text-xl font-bold text-red-400">
                 {formatCurrency(
                   merchants.reduce((sum, merchant) => {
-                    const balance = calculateMerchantBalance(merchant.id, trades, merchant.totalDue, merchant.totalOwe);
+                    const balance = calculateMerchantBalance(merchant.id, trades, merchant.totalDue);
                     return sum + balance.owe;
                   }, 0)
                 )}
@@ -373,32 +305,16 @@ export const Merchants: React.FC = () => {
         </Card>
       </div>
 
-      {/* Search Bar */}
-      <Card className="p-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <Input
-            type="text"
-            placeholder="Search merchants by name, email, phone, or address..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 bg-gray-800/60 border-gray-600/50 focus:border-primary-400/70"
-          />
-        </div>
-      </Card>
-
       {/* Merchants List */}
-      {filteredMerchants.length > 0 ? (
+      {sortedMerchants.length > 0 ? (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-white">Merchants</h2>
-            <p className="text-sm text-gray-400">
-              {searchQuery ? `Found ${filteredMerchants.length} of ${sortedMerchants.length} merchants` : `Sorted by priority (due + owe) - ${sortedMerchants.length} merchants`}
-            </p>
+            <p className="text-sm text-gray-400">Sorted by priority (due + owe) - {sortedMerchants.length} merchants</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredMerchants.map((merchant, index) => {
-            const balance = calculateMerchantBalance(merchant.id, trades, merchant.totalDue, merchant.totalOwe);
+                {sortedMerchants.map((merchant, index) => {
+            const balance = calculateMerchantBalance(merchant.id, trades, merchant.totalDue);
             const merchantTradeCount = trades.filter(trade => trade.merchantId === merchant.id).length;
             
             
@@ -409,12 +325,12 @@ export const Merchants: React.FC = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
               >
-                <Card hover className="p-4 cursor-pointer" onClick={() => handleMerchantClick(merchant)}>
+                <Card hover className="p-4">
                   <div className="flex items-start justify-between mb-4">
                     <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
                       <Users className="w-6 h-6 text-white" />
                     </div>
-                    <div className="flex space-x-1" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex space-x-1">
                       <Button
                         variant="ghost"
                         size="sm"
@@ -496,248 +412,6 @@ export const Merchants: React.FC = () => {
             Add First Merchant
           </Button>
         </Card>
-      )}
-
-      {/* Merchant Details Modal */}
-      {showMerchantDetailsModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-screen items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm"
-              onClick={closeMerchantDetailsModal}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className={`relative w-full ${showTradeHistoryView ? 'max-w-6xl' : 'max-w-md'} bg-gray-900 border border-gray-700 rounded-lg shadow-xl`}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between p-4 border-b border-gray-700">
-                <h3 className="text-lg font-semibold text-white">
-                  {showTradeHistoryView && selectedMerchant ? `${selectedMerchant.name} - Trade History & Dues/Advances` : selectedMerchant ? `${selectedMerchant.name} - Details` : 'Merchant Details'}
-                </h3>
-                <button
-                  onClick={closeMerchantDetailsModal}
-                  className="text-gray-400 hover:text-white transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <div className="p-4">
-        {!showTradeHistoryView ? (
-          <div className="space-y-4">
-            {/* Merchant Info */}
-            {selectedMerchant && (
-              <div className="space-y-3 pb-4 border-b border-gray-700">
-                <div className="flex items-center space-x-3">
-                  <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                    <Users className="w-6 h-6 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-white">{selectedMerchant.name}</h3>
-                    {selectedMerchant.phone && (
-                      <p className="text-sm text-gray-400 flex items-center mt-1">
-                        <Phone className="w-4 h-4 mr-2" />
-                        {selectedMerchant.phone}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                {selectedMerchant.email && (
-                  <div className="flex items-center text-sm text-gray-400">
-                    <Mail className="w-4 h-4 mr-2" />
-                    {selectedMerchant.email}
-                  </div>
-                )}
-                {selectedMerchant.address && (
-                  <div className="flex items-center text-sm text-gray-400">
-                    <MapPin className="w-4 h-4 mr-2" />
-                    {selectedMerchant.address}
-                  </div>
-                )}
-                <div className="grid grid-cols-2 gap-4 pt-2">
-                  <div>
-                    <p className="text-xs text-gray-400">Due Amount</p>
-                    <p className="text-lg font-bold text-green-400">
-                      {formatCurrency(calculateMerchantBalance(selectedMerchant.id, trades, selectedMerchant.totalDue, selectedMerchant.totalOwe).due)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-400">Owe Amount</p>
-                    <p className="text-lg font-bold text-red-400">
-                      {formatCurrency(calculateMerchantBalance(selectedMerchant.id, trades, selectedMerchant.totalDue, selectedMerchant.totalOwe).owe)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Action Button */}
-            <div className="space-y-3">
-              <Button
-                onClick={handleViewTradeHistory}
-                className="w-full justify-start"
-                variant="outline"
-              >
-                <History className="w-5 h-5 mr-3" />
-                <div className="text-left">
-                  <div className="font-semibold">Trade History & Dues/Advances</div>
-                  <div className="text-xs text-gray-400">View all trades with dues and advances</div>
-                </div>
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">Trade History & Dues/Advances</h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleBackToMerchantDetails}
-              >
-                ← Back
-              </Button>
-            </div>
-
-            {/* Date Range Filter */}
-            <Card className="p-4 bg-gray-800/50">
-              <div className="flex items-center gap-3 mb-3">
-                <CalendarDays className="w-5 h-5 text-primary-400" />
-                <span className="text-sm font-medium text-white">Filter by Date Range</span>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-gray-400 mb-1.5">Start Date</label>
-                  <Input
-                    type="date"
-                    value={dateRange.startDate}
-                    onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
-                    className="bg-gray-700/50 border-gray-600/50"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-400 mb-1.5">End Date</label>
-                  <Input
-                    type="date"
-                    value={dateRange.endDate}
-                    onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
-                    className="bg-gray-700/50 border-gray-600/50"
-                    min={dateRange.startDate || undefined}
-                  />
-                </div>
-              </div>
-              {(dateRange.startDate || dateRange.endDate) && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleClearDateRange}
-                  className="mt-3 w-full text-xs"
-                >
-                  Clear Date Filter
-                </Button>
-              )}
-            </Card>
-
-            {selectedMerchantTrades.length > 0 ? (
-              <div>
-                <div className="mb-3 text-sm text-gray-400">
-                  Showing {selectedMerchantTrades.length} trade{selectedMerchantTrades.length !== 1 ? 's' : ''}
-                  {(dateRange.startDate || dateRange.endDate) && (
-                    <span className="ml-2">
-                      {dateRange.startDate && `from ${format(new Date(dateRange.startDate), 'MMM dd, yyyy')}`}
-                      {dateRange.startDate && dateRange.endDate && ' to '}
-                      {dateRange.endDate && format(new Date(dateRange.endDate), 'MMM dd, yyyy')}
-                    </span>
-                  )}
-                </div>
-                
-                {/* Table View */}
-                <div className="border border-gray-700 rounded-lg overflow-hidden max-h-96 overflow-y-auto overflow-x-auto">
-                  <table className="w-full min-w-full">
-                    <thead className="bg-gray-800 sticky top-0">
-                      <tr>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase whitespace-nowrap">Date</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase whitespace-nowrap">Type</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase whitespace-nowrap">Metal</th>
-                        <th className="px-3 py-3 text-right text-xs font-medium text-gray-400 uppercase whitespace-nowrap">Weight</th>
-                        <th className="px-3 py-3 text-right text-xs font-medium text-gray-400 uppercase whitespace-nowrap">Total Amount</th>
-                        <th className="px-3 py-3 text-right text-xs font-medium text-gray-400 uppercase whitespace-nowrap">Paid/Received</th>
-                        <th className="px-3 py-3 text-right text-xs font-medium text-gray-400 uppercase whitespace-nowrap bg-green-900/20">Dues</th>
-                        <th className="px-3 py-3 text-right text-xs font-medium text-gray-400 uppercase whitespace-nowrap bg-red-900/20">Advances</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-700">
-                      {selectedMerchantTrades.map((trade: TradeWithBalance) => {
-                        const tradeDate = trade.tradeDate 
-                          ? (typeof trade.tradeDate === 'string' ? new Date(trade.tradeDate) : trade.tradeDate)
-                          : new Date(trade.createdAt);
-                        return (
-                          <tr key={trade.id} className="hover:bg-gray-800/50">
-                            <td className="px-3 py-3 text-sm text-gray-300 whitespace-nowrap">
-                              {format(tradeDate, 'MMM dd, yyyy')}
-                            </td>
-                            <td className="px-3 py-3 text-sm text-white capitalize whitespace-nowrap">
-                              {trade.type}
-                            </td>
-                            <td className="px-3 py-3 text-sm text-gray-300 capitalize whitespace-nowrap">
-                              {trade.metalType || '-'}
-                            </td>
-                            <td className="px-3 py-3 text-sm text-gray-300 text-right whitespace-nowrap">
-                              {trade.weight ? `${trade.weight} ${trade.metalType === 'gold' ? 'gm' : 'kg'}` : '-'}
-                            </td>
-                            <td className="px-3 py-3 text-sm font-semibold text-white text-right whitespace-nowrap">
-                              {formatCurrency(trade.totalAmount)}
-                            </td>
-                            <td className="px-3 py-3 text-sm text-gray-300 text-right whitespace-nowrap">
-                              {(() => {
-                                if (trade.type === 'buy') {
-                                  return trade.amountPaid ? formatCurrency(trade.amountPaid) : '-';
-                                } else if (trade.type === 'sell') {
-                                  return trade.amountReceived ? formatCurrency(trade.amountReceived) : '-';
-                                } else if (trade.type === 'settlement') {
-                                  if (trade.settlementDirection === 'receiving') {
-                                    return trade.amountReceived ? formatCurrency(trade.amountReceived) : (trade.totalAmount ? formatCurrency(trade.totalAmount) : '-');
-                                  } else {
-                                    return trade.amountPaid ? formatCurrency(trade.amountPaid) : (trade.totalAmount ? formatCurrency(trade.totalAmount) : '-');
-                                  }
-                                }
-                                return '-';
-                              })()}
-                            </td>
-                            <td className="px-3 py-3 text-sm font-medium text-green-400 text-right whitespace-nowrap bg-green-900/10">
-                              {formatCurrency(trade.runningDues || 0)}
-                            </td>
-                            <td className="px-3 py-3 text-sm font-medium text-red-400 text-right whitespace-nowrap bg-red-900/10">
-                              {formatCurrency(trade.runningAdvances || 0)}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <History className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-                <p className="text-gray-400">
-                  {dateRange.startDate || dateRange.endDate 
-                    ? 'No trades found in the selected date range' 
-                    : 'No trades found for this merchant'}
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-              </div>
-            </motion.div>
-          </div>
-        </div>
       )}
 
       {/* Add/Edit Merchant Modal */}
