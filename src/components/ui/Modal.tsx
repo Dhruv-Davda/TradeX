@@ -7,9 +7,11 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
+  className?: string;
 }
 
-export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
+export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, className = '' }) => {
+  const modalClassName = className || 'max-w-md';
   return (
     <AnimatePresence>
       {isOpen && (
@@ -26,7 +28,7 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-md bg-gray-900 border border-gray-700 rounded-lg shadow-xl"
+              className={`relative w-full ${modalClassName} bg-gray-900 border border-gray-700 rounded-lg shadow-xl`}
             >
               <div className="flex items-center justify-between p-4 border-b border-gray-700">
                 <h3 className="text-lg font-semibold text-white">{title}</h3>
