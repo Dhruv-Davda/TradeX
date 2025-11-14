@@ -254,6 +254,7 @@ export const Buy: React.FC = () => {
           <Input
             label="Trade Date"
             type="date"
+            whiteBorder
             {...register('tradeDate', { required: 'Trade date is required' })}
             error={errors.tradeDate?.message}
           />
@@ -264,6 +265,7 @@ export const Buy: React.FC = () => {
             type="number"
             step="0.0001"
             placeholder="0.0000"
+            whiteBorder
             {...register('weight', { 
               required: 'Weight is required',
               min: { value: 0.0001, message: 'Weight must be greater than 0' }
@@ -275,6 +277,7 @@ export const Buy: React.FC = () => {
               type="number"
               step="0.01"
               placeholder="0.00"
+              whiteBorder
               {...register('pricePerUnit', { 
                 required: 'Price is required',
                 min: { value: 0.01, message: 'Price must be greater than 0' }
@@ -289,6 +292,7 @@ export const Buy: React.FC = () => {
               type="number"
               step="0.01"
               placeholder="0.00"
+              whiteBorder
               {...register('laborCharges', { 
                 min: { value: 0, message: 'Labor charges cannot be negative' }
               })}
@@ -324,6 +328,7 @@ export const Buy: React.FC = () => {
             type="number"
             step="0.01"
             placeholder="0.00"
+            whiteBorder
             {...register('amountPaid', { 
               required: 'Amount paid is required',
               min: { value: 0, message: 'Amount cannot be negative' }
@@ -346,6 +351,7 @@ export const Buy: React.FC = () => {
           <Input
             label="Notes (Optional)"
             placeholder="Add any additional notes"
+            whiteBorder
             {...register('notes')}
           />
 

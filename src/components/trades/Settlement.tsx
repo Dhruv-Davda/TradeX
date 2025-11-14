@@ -268,6 +268,7 @@ export const Settlement: React.FC = () => {
           <Input
             label="Settlement Date"
             type="date"
+            whiteBorder
             {...register('tradeDate', { required: 'Settlement date is required' })}
             error={errors.tradeDate?.message}
           />
@@ -280,6 +281,7 @@ export const Settlement: React.FC = () => {
                   type="number"
                   step="0.001"
                   placeholder="0.000"
+                  whiteBorder
                   {...register('weight', { 
                     required: 'Weight is required for metal settlement',
                     min: { value: 0.001, message: 'Weight must be greater than 0' }
@@ -292,6 +294,7 @@ export const Settlement: React.FC = () => {
                   type="number"
                   step="0.01"
                   placeholder="0.00"
+                  whiteBorder
                   {...register('rate', { 
                     required: 'Rate is required for metal settlement',
                     min: { value: 0.01, message: 'Rate must be greater than 0' }
@@ -305,6 +308,7 @@ export const Settlement: React.FC = () => {
                 type="number"
                 step="0.01"
                 placeholder="0.00"
+                whiteBorder
                 {...register('amount', { 
                   required: 'Amount is required',
                   min: { value: 0.01, message: 'Amount must be greater than 0' }
@@ -320,6 +324,7 @@ export const Settlement: React.FC = () => {
               type="number"
               step="0.01"
               placeholder="0.00"
+              whiteBorder
               {...register('amount', { 
                 required: 'Amount is required',
                 min: { value: 0.01, message: 'Amount must be greater than 0' }
@@ -331,6 +336,7 @@ export const Settlement: React.FC = () => {
           <Input
             label="Notes (Optional)"
             placeholder="Add any additional notes"
+            whiteBorder
             {...register('notes')}
           />
 

@@ -204,6 +204,7 @@ export const Transfer: React.FC = () => {
           <Input
             label="Transfer Date"
             type="date"
+            whiteBorder
             {...register('tradeDate', { required: 'Transfer date is required' })}
             error={errors.tradeDate?.message}
           />
@@ -212,12 +213,14 @@ export const Transfer: React.FC = () => {
             <Input
               label="Pickup Location"
               placeholder="Enter pickup address"
+              whiteBorder
               {...register('pickupLocation', { required: 'Pickup location is required' })}
               error={errors.pickupLocation?.message}
             />
             <Input
               label="Drop Location"
               placeholder="Enter drop address"
+              whiteBorder
               {...register('dropLocation', { required: 'Drop location is required' })}
               error={errors.dropLocation?.message}
             />
@@ -229,6 +232,7 @@ export const Transfer: React.FC = () => {
               type="number"
               step="0.01"
               placeholder="0.00"
+              whiteBorder
               {...register('totalAmount', { 
                 required: 'Amount is required',
                 min: { value: 0.01, message: 'Amount must be greater than 0' }
@@ -240,6 +244,7 @@ export const Transfer: React.FC = () => {
               type="number"
               step="0.01"
               placeholder="0.00"
+              whiteBorder
               {...register('transferCharges', { 
                 min: { value: 0, message: 'Charges cannot be negative' }
               })}
@@ -281,6 +286,7 @@ export const Transfer: React.FC = () => {
           <Input
             label="Notes (Optional)"
             placeholder="Add any additional notes"
+            whiteBorder
             {...register('notes')}
           />
 

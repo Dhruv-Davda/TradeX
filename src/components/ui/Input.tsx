@@ -5,12 +5,14 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
   icon?: React.ReactNode;
+  whiteBorder?: boolean; // For trade forms (buy/sell/settlement/transfer)
 }
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(({
   label,
   error,
   icon,
+  whiteBorder = false,
   className = '',
   ...props
 }, ref) => {
@@ -29,7 +31,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(({
         )}
         <input
           ref={ref}
-          className={`input ${icon ? 'pl-12' : ''} ${error ? 'input-error' : ''} ${className}`}
+          className={`input ${icon ? 'pl-12' : ''} ${error ? 'input-error' : ''} ${whiteBorder ? '!border-white/30 focus:!border-white/50 focus:!ring-white/30' : ''} ${className}`}
           {...props}
         />
       </div>
