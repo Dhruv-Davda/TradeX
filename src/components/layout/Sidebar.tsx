@@ -12,7 +12,8 @@ import {
   Package,
   Scale,
   DollarSign,
-  Database
+  Database,
+  Layers
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -22,6 +23,7 @@ const navigation = [
   { name: 'Sell', href: '/sell', icon: TrendingUp },
   { name: 'Transfer', href: '/transfer', icon: Receipt },
   { name: 'Settlement', href: '/settlement', icon: Coins },
+  // { name: 'Bulk Entry', href: '/bulk-entry', icon: Layers }, // Hidden - using inline multi-entry feature instead
   { name: 'Trade History', href: '/history', icon: History },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Expenses', href: '/expenses', icon: Receipt },

@@ -8,6 +8,7 @@ import { Buy } from './components/trades/Buy';
 import { Sell } from './components/trades/Sell';
 import { Transfer } from './components/trades/Transfer';
 import { Settlement } from './components/trades/Settlement';
+import { BulkTradeEntry } from './components/trades/BulkTradeEntry';
 import { TradeHistory } from './components/history/TradeHistory';
 import { Analytics } from './components/analytics/Analytics';
 import { Expenses } from './components/expenses/Expenses';
@@ -60,6 +61,7 @@ const AppContent: React.FC = () => {
           <Route path="sell" element={<Sell />} />
           <Route path="transfer" element={<Transfer />} />
           <Route path="settlement" element={<Settlement />} />
+          <Route path="bulk-entry" element={<BulkTradeEntry />} />
           <Route path="history" element={<TradeHistory />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="expenses" element={<Expenses />} />
