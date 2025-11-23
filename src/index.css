@@ -1,0 +1,222 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Poppins:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-secondary-700;
+  }
+  
+  body {
+    @apply bg-gradient-to-br from-secondary-900 via-secondary-800 to-secondary-900 text-white font-sans antialiased;
+    background-attachment: fixed;
+  }
+  
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    @apply w-2;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-secondary-800;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-secondary-600 rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-secondary-500;
+  }
+  
+  /* Selection styles */
+  ::selection {
+    @apply bg-primary-500/20 text-primary-100;
+  }
+  
+  /* Focus styles */
+  *:focus-visible {
+    @apply outline-none ring-1 ring-primary-500/30 ring-offset-1 ring-offset-secondary-900;
+  }
+
+  /* Hide number input spinners (Chrome, Safari, Edge, Opera) */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  /* Hide number input spinners (Firefox) */
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+}
+
+@layer components {
+  /* Glass morphism effect */
+  .glass {
+    @apply bg-white/5 backdrop-blur-md border border-white/10;
+  }
+  
+  .glass-dark {
+    @apply bg-black/20 backdrop-blur-md border border-white/5;
+  }
+  
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-primary-400 to-accent-400 bg-clip-text text-transparent;
+  }
+  
+  .gradient-text-success {
+    @apply bg-gradient-to-r from-success-400 to-success-600 bg-clip-text text-transparent;
+  }
+  
+  .gradient-text-warning {
+    @apply bg-gradient-to-r from-warning-400 to-warning-600 bg-clip-text text-transparent;
+  }
+  
+  .gradient-text-danger {
+    @apply bg-gradient-to-r from-danger-400 to-danger-600 bg-clip-text text-transparent;
+  }
+  
+  /* Button variants */
+  .btn-primary {
+    @apply bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white font-medium px-6 py-3 rounded-xl shadow-soft hover:shadow-medium transition-all duration-200 transform hover:scale-105 active:scale-95;
+  }
+  
+  .btn-secondary {
+    @apply bg-gradient-to-r from-secondary-600 to-secondary-700 hover:from-secondary-700 hover:to-secondary-800 text-white font-medium px-6 py-3 rounded-xl shadow-soft hover:shadow-medium transition-all duration-200 transform hover:scale-105 active:scale-95;
+  }
+  
+  .btn-outline {
+    @apply border-2 border-primary-500 text-primary-400 hover:bg-primary-500 hover:text-white font-medium px-6 py-3 rounded-xl transition-all duration-200 transform hover:scale-105 active:scale-95;
+  }
+  
+  .btn-ghost {
+    @apply text-secondary-300 hover:text-white hover:bg-secondary-700 font-medium px-6 py-3 rounded-xl transition-all duration-200 transform hover:scale-105 active:scale-95;
+  }
+  
+  /* Card variants */
+  .card {
+    @apply bg-gradient-to-br from-secondary-800/50 to-secondary-900/50 backdrop-blur-sm border border-secondary-700/50 rounded-2xl shadow-soft hover:shadow-medium transition-all duration-300;
+  }
+  
+  .card-hover {
+    @apply card hover:shadow-hard hover:border-primary-500/30 hover:-translate-y-1;
+  }
+  
+  .card-glow {
+    @apply card shadow-glow hover:shadow-glow-purple;
+  }
+  
+  /* Input styles */
+  .input {
+    @apply w-full px-4 py-3 bg-secondary-800/50 border border-secondary-600 rounded-xl text-white placeholder-secondary-400 focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 transition-all duration-200 backdrop-blur-sm;
+  }
+  
+  .input-error {
+    @apply input border-danger-500 focus:ring-danger-500/50 focus:border-danger-500;
+  }
+  
+  /* Select styles */
+  .select {
+    @apply w-full px-4 py-3 bg-secondary-800/50 border border-secondary-600 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 transition-all duration-200 backdrop-blur-sm;
+  }
+  
+  .select-error {
+    @apply select border-danger-500 focus:ring-danger-500/50 focus:border-danger-500;
+  }
+  
+  /* Status indicators */
+  .status-success {
+    @apply bg-success-500/10 text-success-400 border border-success-500/20;
+  }
+  
+  .status-warning {
+    @apply bg-warning-500/10 text-warning-400 border border-warning-500/20;
+  }
+  
+  .status-danger {
+    @apply bg-danger-500/10 text-danger-400 border border-danger-500/20;
+  }
+  
+  .status-info {
+    @apply bg-primary-500/10 text-primary-400 border border-primary-500/20;
+  }
+  
+  /* Sidebar scroll styles */
+  .sidebar-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch; /* iOS smooth scrolling */
+  }
+  
+  .sidebar-scroll::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  .sidebar-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .sidebar-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+    transition: background-color 0.2s ease;
+  }
+  
+  .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+  
+  .sidebar-scroll::-webkit-scrollbar-thumb:active {
+    background: rgba(255, 255, 255, 0.4);
+  }
+  
+  /* Mobile-specific sidebar improvements */
+  @media (max-width: 1024px) {
+    .sidebar-scroll::-webkit-scrollbar {
+      width: 4px;
+    }
+    
+    .sidebar-scroll {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+    }
+  }
+}
+
+@layer utilities {
+  .text-shadow {
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  
+  .text-shadow-lg {
+    text-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  }
+  
+  .backdrop-blur-xs {
+    backdrop-filter: blur(2px);
+  }
+
+  /* Shimmer animation for login page */
+  @keyframes shimmer {
+    0% {
+      transform: translateX(-100%) skewX(-12deg);
+    }
+    100% {
+      transform: translateX(200%) skewX(-12deg);
+    }
+  }
+
+  .animate-shimmer {
+    animation: shimmer 3s infinite;
+  }
+}
