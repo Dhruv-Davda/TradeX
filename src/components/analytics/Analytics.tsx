@@ -24,8 +24,7 @@ import { StockService } from '../../services/stockService';
 import { ManualNetProfitService } from '../../services/manualNetProfitService';
 import { formatCurrency, formatCurrencyInCR } from '../../utils/calculations';
 import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths, isWithinInterval } from 'date-fns';
-// Button import removed as monthly view no longer uses buttons
-import { Input } from '../ui/Input';
+import { MonthYearPicker } from '../ui/MonthYearPicker';
 
 export const Analytics: React.FC = () => {
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -337,17 +336,17 @@ export const Analytics: React.FC = () => {
       };
     });
 
-    // Trade type distribution
+    // Trade type distribution (using filtered data for selected month range)
     const tradeTypes = [
       { name: 'Buy', value: buyTrades.length, color: '#10b981' },
       { name: 'Sell', value: sellTrades.length, color: '#3b82f6' },
-      { name: 'Transfer', value: trades.filter(t => t.type === 'transfer').length, color: '#8b5cf6' },
-      { name: 'Settlement', value: trades.filter(t => t.type === 'settlement').length, color: '#f59e0b' },
+      { name: 'Transfer', value: filteredTrades.filter(t => t.type === 'transfer').length, color: '#8b5cf6' },
+      { name: 'Settlement', value: filteredTrades.filter(t => t.type === 'settlement').length, color: '#f59e0b' },
     ];
 
-    // Metal type distribution
-    const goldTrades = trades.filter(t => t.metalType === 'gold');
-    const silverTrades = trades.filter(t => t.metalType === 'silver');
+    // Metal type distribution (using filtered data for selected month range)
+    const goldTrades = filteredTrades.filter(t => t.metalType === 'gold');
+    const silverTrades = filteredTrades.filter(t => t.metalType === 'silver');
     
     const metalDistribution = [
       { name: 'Gold', value: goldTrades.length, color: '#fbbf24' },
@@ -371,7 +370,7 @@ export const Analytics: React.FC = () => {
       monthlyData,
       tradeTypes,
       metalDistribution,
-      totalTrades: trades.length,
+      totalTrades: filteredTrades.length,
       maxValue,
       // Expose deltas: gold in grams, silver in kg (for display)
       goldDeltaGrams: goldDeltaGrams,
@@ -387,7 +386,6 @@ export const Analytics: React.FC = () => {
       icon: TrendingUp,
       color: 'text-green-400',
       bgColor: 'bg-green-400/10',
-      change: '+12%',
     },
     {
       title: 'Total Purchases',
@@ -395,7 +393,6 @@ export const Analytics: React.FC = () => {
       icon: TrendingDown,
       color: 'text-red-400',
       bgColor: 'bg-red-400/10',
-      change: '+8%',
     },
     {
       title: 'Other Income',
@@ -403,7 +400,6 @@ export const Analytics: React.FC = () => {
       icon: TrendingUp,
       color: 'text-emerald-400',
       bgColor: 'bg-emerald-400/10',
-      change: '+5%',
     },
     {
       title: 'Net Expenses',
@@ -411,7 +407,6 @@ export const Analytics: React.FC = () => {
       icon: TrendingDown,
       color: 'text-orange-400',
       bgColor: 'bg-orange-400/10',
-      change: '-5%',
     },
     {
       title: 'Gross Profit',
@@ -419,7 +414,6 @@ export const Analytics: React.FC = () => {
       icon: DollarSign,
       color: analytics.grossProfit >= 0 ? 'text-green-400' : 'text-red-400',
       bgColor: analytics.grossProfit >= 0 ? 'bg-green-400/10' : 'bg-red-400/10',
-      change: '+15%',
     },
   ];
 
@@ -430,7 +424,6 @@ export const Analytics: React.FC = () => {
       icon: BarChart3,
       color: analytics.netProfit >= 0 ? 'text-green-400' : 'text-red-400',
       bgColor: analytics.netProfit >= 0 ? 'bg-green-400/10' : 'bg-red-400/10',
-      change: '+10%',
     },
   ];
 
@@ -472,45 +465,39 @@ export const Analytics: React.FC = () => {
         </div>
       </motion.div>
 
-      {/* Month Range Filter (elegant design) */}
-      <Card className="p-6 bg-gradient-to-r from-gray-800/50 to-gray-900/50 border border-gray-700/50 backdrop-blur-sm">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6 md:gap-20 lg:gap-24">
+      {/* Month Range Filter */}
+      <Card className="p-5 bg-gradient-to-r from-gray-800/50 to-gray-900/50 border border-gray-700/50 backdrop-blur-sm">
+        <div className="flex flex-col lg:flex-row items-center justify-between gap-6">
           {/* Icon and Label Section */}
-          <div className="flex items-center gap-3 min-w-fit">
+          <div className="flex items-center gap-3">
             <div className="p-2.5 bg-gradient-to-br from-primary-500/20 to-primary-600/20 rounded-lg border border-primary-500/30">
               <Calendar className="w-5 h-5 text-primary-400" />
             </div>
             <div>
-              <h3 className="text-white font-semibold text-sm uppercase tracking-wide">Month Range</h3>
+              <h3 className="text-white font-semibold text-sm uppercase tracking-wide">Date Range</h3>
               <p className="text-gray-400 text-xs mt-0.5">Select period for analysis</p>
             </div>
           </div>
 
-          {/* Date Inputs Section */}
-          <div className="flex items-center gap-3 flex-1 w-full sm:w-auto">
-            <div className="relative flex-1 sm:flex-initial sm:w-48">
-              <label className="block text-xs text-gray-400 mb-1.5 font-medium">From</label>
-              <Input
-                type="month"
-                value={monthRange.startMonth}
-                onChange={(e) => setMonthRange(prev => ({ ...prev, startMonth: e.target.value }))}
-                className="w-full bg-gray-800/60 border-gray-600/50 hover:border-gray-500/70 focus:border-primary-400/70 focus:ring-2 focus:ring-primary-400/20 transition-all duration-200"
-              />
+          {/* Month Pickers */}
+          <div className="flex items-end gap-4 w-full lg:w-auto justify-center lg:justify-end">
+            <MonthYearPicker
+              label="From"
+              value={monthRange.startMonth}
+              onChange={(value) => setMonthRange(prev => ({ ...prev, startMonth: value }))}
+              className="w-44 sm:w-52"
+            />
+
+            <div className="flex items-center justify-center pb-2.5 px-2">
+              <div className="w-6 h-px bg-gradient-to-r from-gray-600 via-gray-400 to-gray-600"></div>
             </div>
-            
-            <div className="hidden sm:flex items-center justify-center px-2">
-              <div className="w-10 h-px bg-gradient-to-r from-transparent via-gray-500 to-transparent"></div>
-            </div>
-            
-            <div className="relative flex-1 sm:flex-initial sm:w-48">
-              <label className="block text-xs text-gray-400 mb-1.5 font-medium">To</label>
-              <Input
-                type="month"
-                value={monthRange.endMonth}
-                onChange={(e) => setMonthRange(prev => ({ ...prev, endMonth: e.target.value }))}
-                className="w-full bg-gray-800/60 border-gray-600/50 hover:border-gray-500/70 focus:border-primary-400/70 focus:ring-2 focus:ring-primary-400/20 transition-all duration-200"
-              />
-            </div>
+
+            <MonthYearPicker
+              label="To"
+              value={monthRange.endMonth}
+              onChange={(value) => setMonthRange(prev => ({ ...prev, endMonth: value }))}
+              className="w-44 sm:w-52"
+            />
           </div>
         </div>
       </Card>
@@ -525,11 +512,10 @@ export const Analytics: React.FC = () => {
             transition={{ duration: 0.3, delay: index * 0.1 }}
           >
             <Card hover className="p-4">
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-3">
                 <div className={`p-2 rounded-lg ${stat.bgColor}`}>
                   <stat.icon className={`w-5 h-5 ${stat.color}`} />
                 </div>
-                <span className={`text-xs ${stat.color}`}>{stat.change}</span>
               </div>
               <p className="text-sm text-gray-400 mb-1">{stat.title}</p>
               <p className="text-xl font-bold text-white">{formatCurrency(stat.value)}</p>
@@ -548,35 +534,24 @@ export const Analytics: React.FC = () => {
             transition={{ duration: 0.3, delay: index * 0.1 }}
           >
             <Card hover className="p-4">
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-3">
                 <div className={`p-2 rounded-lg ${stat.bgColor}`}>
                   <stat.icon className={`w-5 h-5 ${stat.color}`} />
                 </div>
-                <span className={`text-xs ${stat.color}`}>{stat.change}</span>
               </div>
-              <p className="text-sm text-gray-400 mb-1">{stat.title}</p>
-              {/* Net Profit breakdown in bold format */}
-              <p className="text-lg font-bold text-white mt-2">
-                {(() => {
-                  const fmtGold = (val: number) => {
-                    const sign = val >= 0 ? '+' : '-';
-                    const abs = Math.abs(val);
-                    const formatted = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(abs);
-                    return `${sign} ${formatted} gm`;
-                  };
-                  const fmtSilver = (val: number) => {
-                    const sign = val >= 0 ? '+' : '-';
-                    const abs = Math.abs(val);
-                    const formatted = new Intl.NumberFormat('en-IN', { 
-                      minimumFractionDigits: 4, 
-                      maximumFractionDigits: 4 
-                    }).format(abs);
-                    return `${sign} ${formatted} kg`;
-                  };
-                  const grossFormatted = formatCurrency(analytics.grossProfit);
-                  return `${grossFormatted} ${fmtGold(analytics.goldDeltaGrams)} Gold ${fmtSilver(analytics.silverDeltaKg)} Silver`;
-                })()}
-              </p>
+              <p className="text-sm text-gray-400 mb-2">{stat.title}</p>
+              {/* Net Profit breakdown with stock deltas */}
+              <div className="space-y-1">
+                <p className="text-xl font-bold text-white">{formatCurrency(analytics.grossProfit)}</p>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
+                  <span className={analytics.goldDeltaGrams >= 0 ? 'text-yellow-400' : 'text-yellow-500'}>
+                    {analytics.goldDeltaGrams >= 0 ? '+' : ''}{new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(analytics.goldDeltaGrams)} gm Gold
+                  </span>
+                  <span className={analytics.silverDeltaKg >= 0 ? 'text-gray-300' : 'text-gray-400'}>
+                    {analytics.silverDeltaKg >= 0 ? '+' : ''}{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 4, maximumFractionDigits: 4 }).format(analytics.silverDeltaKg)} kg Silver
+                  </span>
+                </div>
+              </div>
             </Card>
           </motion.div>
         ))}
@@ -590,12 +565,12 @@ export const Analytics: React.FC = () => {
             transition={{ duration: 0.3, delay: index * 0.1 }}
           >
             <Card hover className="p-4">
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-3">
                 <div className={`p-2 rounded-lg ${stat.bgColor}`}>
                   <stat.icon className={`w-5 h-5 ${stat.color}`} />
                 </div>
               </div>
-              <p className="text-sm text-gray-400 mb-1">{stat.title}</p>
+              <p className="text-sm text-gray-400 mb-2">{stat.title}</p>
               <p className="text-xl font-bold text-white">{formatCurrency(stat.value)}</p>
             </Card>
           </motion.div>

@@ -6,6 +6,7 @@ import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Modal } from '../ui/Modal';
+import { TradeEditModal } from '../ui/TradeEditModal';
 import { Merchant, Trade } from '../../types';
 import { formatCurrency, calculateMerchantBalance, calculateTradesWithRunningBalance, TradeWithBalance } from '../../utils/calculations';
 import { TradeService } from '../../services/tradeService';
@@ -25,6 +26,8 @@ export const Merchants: React.FC = () => {
     startDate: '',
     endDate: ''
   });
+  const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
+  const [showTradeEditModal, setShowTradeEditModal] = useState(false);
 
   // Load merchants and trades from database
   const loadAllData = async () => {
@@ -123,6 +126,24 @@ export const Merchants: React.FC = () => {
   // Handle clear date range
   const handleClearDateRange = () => {
     setDateRange({ startDate: '', endDate: '' });
+  };
+
+  // Handle edit trade from merchant view
+  const handleEditTradeFromMerchant = (trade: Trade) => {
+    setEditingTrade(trade);
+    setShowTradeEditModal(true);
+  };
+
+  // Handle trade updated callback
+  const handleTradeUpdated = (updatedTrade: Trade) => {
+    setTrades(trades.map(t => t.id === updatedTrade.id ? updatedTrade : t));
+    setEditingTrade(null);
+  };
+
+  // Handle trade deleted callback
+  const handleTradeDeleted = (tradeId: string) => {
+    setTrades(trades.filter(t => t.id !== tradeId));
+    setEditingTrade(null);
   };
 
   // Get filtered trades for selected merchant with running balances
@@ -699,6 +720,7 @@ export const Merchants: React.FC = () => {
                           <th className="px-3 py-3 text-right text-xs font-medium text-gray-400 uppercase whitespace-nowrap">Paid/Received</th>
                           <th className="px-3 py-3 text-right text-xs font-medium text-gray-400 uppercase whitespace-nowrap bg-green-900/20">Dues</th>
                           <th className="px-3 py-3 text-right text-xs font-medium text-gray-400 uppercase whitespace-nowrap bg-red-900/20">Advances</th>
+                          <th className="px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase whitespace-nowrap">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-700">
@@ -712,7 +734,18 @@ export const Merchants: React.FC = () => {
                               <td className="px-3 py-3 text-sm text-gray-300 whitespace-nowrap">
                                 {format(tradeDate, 'MMM dd, yyyy')}
                               </td>
-                              <td className="px-3 py-3 text-sm text-white capitalize whitespace-nowrap">{trade.type}</td>
+                              <td className="px-3 py-3 text-sm whitespace-nowrap">
+                                <span className="text-white capitalize">{trade.type}</span>
+                                {trade.type === 'settlement' && trade.settlementDirection && (
+                                  <span className={`ml-2 text-xs px-1.5 py-0.5 rounded ${
+                                    trade.settlementDirection === 'receiving'
+                                      ? 'bg-green-500/20 text-green-400'
+                                      : 'bg-orange-500/20 text-orange-400'
+                                  }`}>
+                                    {trade.settlementDirection === 'receiving' ? 'Received' : 'Paid'}
+                                  </span>
+                                )}
+                              </td>
                               <td className="px-3 py-3 text-sm text-gray-300 capitalize whitespace-nowrap">
                                 {trade.metalType || '-'}
                               </td>
@@ -744,6 +777,16 @@ export const Merchants: React.FC = () => {
                               <td className="px-3 py-3 text-sm font-medium text-red-400 text-right whitespace-nowrap bg-red-900/10">
                                 {formatCurrency(trade.runningAdvances || 0)}
                               </td>
+                              <td className="px-3 py-3 text-center whitespace-nowrap">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEditTradeFromMerchant(trade)}
+                                  className="p-1.5"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                              </td>
                             </tr>
                           );
                         })}
@@ -765,6 +808,18 @@ export const Merchants: React.FC = () => {
           )}
         </Modal>
       )}
+
+      {/* Trade Edit Modal */}
+      <TradeEditModal
+        isOpen={showTradeEditModal}
+        onClose={() => {
+          setShowTradeEditModal(false);
+          setEditingTrade(null);
+        }}
+        trade={editingTrade}
+        onTradeUpdated={handleTradeUpdated}
+        onTradeDeleted={handleTradeDeleted}
+      />
     </div>
   );
 };
