@@ -12,6 +12,7 @@ import {
   BarChart3,
   ArrowRight,
   Coins,
+  Gem,
 } from 'lucide-react';
 import {
   BarChart,
@@ -31,6 +32,7 @@ import { PageSkeleton } from '../ui/Skeleton';
 import { formatCurrency, formatCurrencyCompact } from '../../utils/calculations';
 import { TradeService } from '../../services/tradeService';
 import { StockService } from '../../services/stockService';
+import { GhaatService } from '../../services/ghaatService';
 import { Trade } from '../../types';
 import { useAuth } from '../../contexts/AuthContext-simple';
 import { getTradeTypeBadgeClasses, DARK_TOOLTIP_STYLE } from '../../lib/constants';
@@ -42,6 +44,7 @@ export const Dashboard: React.FC = () => {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [stock, setStock] = React.useState<{ gold: number; silver: number }>({ gold: 0, silver: 0 });
+  const [ghaatStockFineGold, setGhaatStockFineGold] = React.useState(0);
 
   const loadTrades = async () => {
     setLoading(true);
@@ -63,6 +66,14 @@ export const Dashboard: React.FC = () => {
         });
         setStock(stockObj);
       }
+
+      // Load Ghaat data
+      const { transactions: ghaatTxns } = await GhaatService.getTransactions();
+      if (ghaatTxns.length > 0) {
+        const stockItems = GhaatService.calculateStock(ghaatTxns);
+        const totalFineGold = stockItems.reduce((sum, item) => sum + item.totalFineGold, 0);
+        setGhaatStockFineGold(totalFineGold);
+      }
     } catch (err) {
       setError(`Unexpected error: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
@@ -79,8 +90,7 @@ export const Dashboard: React.FC = () => {
     const totalPurchases = trades
       .filter(t => t.type === 'buy')
       .reduce((sum, t) => sum + (t.totalAmount || 0), 0);
-    const tradePnL = totalRevenue - totalPurchases;
-    return { totalRevenue, totalPurchases, tradePnL, goldStock: stock.gold, silverStock: stock.silver };
+    return { totalRevenue, totalPurchases, goldStock: stock.gold, silverStock: stock.silver };
   }, [trades, stock]);
 
   // 7-day chart data
@@ -173,26 +183,11 @@ export const Dashboard: React.FC = () => {
           subtitle={<span className="text-[11px] text-gray-500">{formatCurrency(stats.totalPurchases)}</span>}
         />
         <StatCard
-          label="Trade P&L"
-          value={formatCurrencyCompact(Math.abs(stats.tradePnL))}
-          icon={stats.tradePnL >= 0 ? TrendingUp : TrendingDown}
-          variant={stats.tradePnL >= 0 ? 'success' : 'danger'}
-          animationDelay={0.1}
-          subtitle={
-            <div>
-              <span className={`text-xs font-medium ${stats.tradePnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {stats.tradePnL >= 0 ? 'Profit' : 'Loss'}
-              </span>
-              <span className="text-[11px] text-gray-500 ml-2">{formatCurrency(Math.abs(stats.tradePnL))}</span>
-            </div>
-          }
-        />
-        <StatCard
           label="Gold Stock"
           value={`${stats.goldStock.toFixed(2)} gms`}
           icon={Package}
           variant="gold"
-          animationDelay={0.15}
+          animationDelay={0.1}
           subtitle={stats.goldStock < 0 ? <span className="text-xs text-red-400">Deficit</span> : undefined}
         />
         <StatCard
@@ -200,8 +195,16 @@ export const Dashboard: React.FC = () => {
           value={`${stats.silverStock.toFixed(2)} kg`}
           icon={Scale}
           variant="silver"
-          animationDelay={0.2}
+          animationDelay={0.15}
           subtitle={stats.silverStock < 0 ? <span className="text-xs text-red-400">Deficit</span> : undefined}
+        />
+        <StatCard
+          label="Jewellery Stock"
+          value={`${ghaatStockFineGold.toFixed(2)} gm`}
+          icon={Gem}
+          variant="gold"
+          animationDelay={0.2}
+          subtitle={<span className="text-[11px] text-gray-500">Fine gold in stock</span>}
         />
       </div>
 

@@ -168,6 +168,41 @@ export const SORT_OPTIONS = [
 ] as const;
 
 // ============================================================
+// JEWELLERY (GHAAT) CONSTANTS
+// ============================================================
+export const DEFAULT_JEWELLERY_CATEGORIES = [
+  'Bracelets', 'Chains', 'Jhoomke', 'Rings', 'Necklaces',
+  'Pendants', 'Bangles', 'Earrings', 'Mangalsutra', 'Other',
+] as const;
+
+export const WEIGHT_BRACKETS = [
+  { label: 'Under 3 gm', min: 0, max: 3 },
+  { label: '3 - 5 gm', min: 3, max: 5 },
+  { label: '5 - 10 gm', min: 5, max: 10 },
+  { label: '10 - 15 gm', min: 10, max: 15 },
+  { label: '15 - 20 gm', min: 15, max: 20 },
+  { label: '20+ gm', min: 20, max: Infinity },
+] as const;
+
+export const GHAAT_TRANSACTION_COLORS = {
+  buy: { bg: 'bg-amber-500/20', text: 'text-amber-400', border: 'border-amber-500/30', hex: '#f59e0b' },
+  sell: { bg: 'bg-emerald-500/20', text: 'text-emerald-400', border: 'border-emerald-500/30', hex: '#10b981' },
+} as const;
+
+export const JEWELLERY_CATEGORY_COLORS: Record<string, string> = {
+  'Bracelets': '#f59e0b',
+  'Chains': '#3b82f6',
+  'Jhoomke': '#ec4899',
+  'Rings': '#8b5cf6',
+  'Necklaces': '#10b981',
+  'Pendants': '#06b6d4',
+  'Bangles': '#f97316',
+  'Earrings': '#e11d48',
+  'Mangalsutra': '#84cc16',
+  'Other': '#6b7280',
+};
+
+// ============================================================
 // DARK TOOLTIP STYLE (for Recharts)
 // ============================================================
 export const DARK_TOOLTIP_STYLE = {

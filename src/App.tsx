@@ -17,6 +17,10 @@ import { Merchants } from './components/merchants/Merchants';
 import { DataMigration } from './components/migration/DataMigration';
 import { UserSettings } from './components/settings/UserSettings';
 import { AccountSettings } from './components/settings/AccountSettings';
+import { Ghaat } from './components/ghaat/Ghaat';
+import { GhaatBuy } from './components/ghaat/GhaatBuy';
+import { GhaatSell } from './components/ghaat/GhaatSell';
+import { Karigars } from './components/karigars/Karigars';
 import { AuthCallback } from './pages/AuthCallback';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -67,6 +71,10 @@ const AppContent: React.FC = () => {
           <Route path="expenses" element={<Expenses />} />
           <Route path="income" element={<IncomeManagement />} />
           <Route path="merchants" element={<Merchants />} />
+          <Route path="ghaat" element={<Ghaat />} />
+          <Route path="ghaat-buy" element={<GhaatBuy />} />
+          <Route path="ghaat-sell" element={<GhaatSell />} />
+          <Route path="karigars" element={<Karigars />} />
           <Route path="migration" element={<DataMigration />} />
           <Route path="settings/user" element={<UserSettings />} />
           <Route path="settings/account" element={<AccountSettings />} />

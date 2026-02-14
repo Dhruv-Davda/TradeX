@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { BarChart3, TrendingUp, TrendingDown, DollarSign, Calendar } from 'lucide-react';
+import { BarChart3, TrendingUp, TrendingDown, DollarSign, Calendar, Gem } from 'lucide-react';
 import {
   BarChart,
   Bar,
@@ -18,21 +18,23 @@ import {
 import { Card } from '../ui/Card';
 import { StatCard } from '../ui/StatCard';
 import { PageSkeleton } from '../ui/Skeleton';
-import { Trade, Expense, Income } from '../../types';
+import { Trade, Expense, Income, GhaatTransaction } from '../../types';
 import { TradeService } from '../../services/tradeService';
 import { IncomeService } from '../../services/incomeService';
 import { ExpensesService } from '../../services/expensesService';
 import { StockService } from '../../services/stockService';
 import { ManualNetProfitService } from '../../services/manualNetProfitService';
+import { GhaatService } from '../../services/ghaatService';
 import { formatCurrency, formatCurrencyCompact, formatCurrencyInCR } from '../../utils/calculations';
 import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths, isWithinInterval } from 'date-fns';
 import { MonthYearPicker } from '../ui/MonthYearPicker';
-import { TRADE_TYPE_COLORS, METAL_TYPE_COLORS, DARK_TOOLTIP_STYLE } from '../../lib/constants';
+import { TRADE_TYPE_COLORS, METAL_TYPE_COLORS, DARK_TOOLTIP_STYLE, JEWELLERY_CATEGORY_COLORS } from '../../lib/constants';
 
 export const Analytics: React.FC = () => {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [income, setIncome] = useState<Income[]>([]);
+  const [ghaatTransactions, setGhaatTransactions] = useState<GhaatTransaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [stockSnapshots, setStockSnapshots] = useState<{
     endMonth: { goldGrams: number; silverGrams: number } | null;
@@ -44,15 +46,17 @@ export const Analytics: React.FC = () => {
   React.useEffect(() => {
     const loadAllData = async () => {
       try {
-        const [tradesResult, expensesResult, incomeResult] = await Promise.all([
+        const [tradesResult, expensesResult, incomeResult, ghaatResult] = await Promise.all([
           TradeService.getTrades(),
           ExpensesService.getExpenses(),
           IncomeService.getIncome(),
+          GhaatService.getTransactions(),
         ]);
 
         if (!tradesResult.error) setTrades(tradesResult.trades);
         if (!expensesResult.error) setExpenses(expensesResult.expenses);
         if (!incomeResult.error) setIncome(incomeResult.income);
+        if (!ghaatResult.error) setGhaatTransactions(ghaatResult.transactions);
       } catch (error) {
         console.error('Error loading analytics data:', error);
       } finally {
@@ -249,6 +253,24 @@ export const Analytics: React.FC = () => {
       silverDeltaKg,
     };
   }, [trades, expenses, income, monthRange, stockSnapshots]);
+
+  // Ghaat P&L analytics
+  const ghaatAnalytics = useMemo(() => {
+    const pnl = GhaatService.calculatePnL(ghaatTransactions);
+    const stockItems = GhaatService.calculateStock(ghaatTransactions);
+    const totalStockFineGold = stockItems.reduce((sum, item) => sum + item.totalFineGold, 0);
+
+    // Category distribution for pie chart
+    const categoryData = stockItems
+      .filter(item => item.totalFineGold > 0)
+      .map(item => ({
+        name: item.category,
+        value: Number(item.totalFineGold.toFixed(3)),
+        color: JEWELLERY_CATEGORY_COLORS[item.category] || '#6b7280',
+      }));
+
+    return { pnl, totalStockFineGold, categoryData };
+  }, [ghaatTransactions]);
 
   if (isLoading) return <PageSkeleton cards={5} />;
 
@@ -543,6 +565,141 @@ export const Analytics: React.FC = () => {
           </Card>
         </motion.div>
       </div>
+
+      {/* Ghaat (Jewellery) P&L Section */}
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
+        <div className="flex items-center space-x-3 mb-4">
+          <div className="w-9 h-9 bg-gradient-to-r from-amber-500 to-yellow-600 rounded-xl flex items-center justify-center">
+            <Gem className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-white font-display">Ghaat P&L</h2>
+            <p className="text-gray-400 text-xs">Jewellery profit & loss in gold grams</p>
+          </div>
+        </div>
+      </motion.div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <StatCard
+          label="Fine Gold Bought"
+          value={`${ghaatAnalytics.pnl.totalBuyFineGold.toFixed(3)} gm`}
+          icon={TrendingDown}
+          variant="warning"
+          animationDelay={0.55}
+          subtitle={<span className="text-[11px] text-gray-500">Given to karigars</span>}
+        />
+        <StatCard
+          label="Fine Gold Sold"
+          value={`${ghaatAnalytics.pnl.totalSellFineGold.toFixed(3)} gm`}
+          icon={TrendingUp}
+          variant="emerald"
+          animationDelay={0.6}
+          subtitle={<span className="text-[11px] text-gray-500">Charged to merchants</span>}
+        />
+        <StatCard
+          label="Gold Labor Paid"
+          value={`${ghaatAnalytics.pnl.goldLaborPaid.toFixed(3)} gm`}
+          icon={DollarSign}
+          variant="purple"
+          animationDelay={0.65}
+          subtitle={<span className="text-[11px] text-gray-500">Labor in gold</span>}
+        />
+        <StatCard
+          label="Jewellery Stock"
+          value={`${ghaatAnalytics.totalStockFineGold.toFixed(3)} gm`}
+          icon={Gem}
+          variant="gold"
+          animationDelay={0.7}
+          subtitle={<span className="text-[11px] text-gray-500">Fine gold in inventory</span>}
+        />
+        <StatCard
+          label="Net Gold Profit"
+          value={`${Math.abs(ghaatAnalytics.pnl.netGoldProfit).toFixed(3)} gm`}
+          icon={ghaatAnalytics.pnl.netGoldProfit >= 0 ? TrendingUp : TrendingDown}
+          variant={ghaatAnalytics.pnl.netGoldProfit >= 0 ? 'success' : 'danger'}
+          animationDelay={0.75}
+          subtitle={
+            <span className={`text-xs font-medium ${ghaatAnalytics.pnl.netGoldProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+              {ghaatAnalytics.pnl.netGoldProfit >= 0 ? 'Profit' : 'Loss'}
+            </span>
+          }
+        />
+      </div>
+
+      {/* Category Stock Distribution */}
+      {ghaatAnalytics.categoryData.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}>
+            <Card className="p-5">
+              <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Jewellery Stock by Category</h3>
+              <div className="flex flex-col lg:flex-row items-center gap-4">
+                <div className="w-full lg:w-1/2" style={{ height: 220 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={ghaatAnalytics.categoryData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={55}
+                        outerRadius={95}
+                        paddingAngle={3}
+                        dataKey="value"
+                      >
+                        {ghaatAnalytics.categoryData.map((entry, index) => (
+                          <Cell key={index} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={DARK_TOOLTIP_STYLE}
+                        formatter={(value: number) => [`${value} gm`, 'Fine Gold']}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="w-full lg:w-1/2 space-y-2">
+                  {ghaatAnalytics.categoryData.map((cat) => (
+                    <div key={cat.name} className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/[0.02]">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                        <span className="text-xs text-gray-300">{cat.name}</span>
+                      </div>
+                      <span className="text-xs font-medium text-white">{cat.value} gm</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.85 }}>
+            <Card className="p-5">
+              <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Ghaat Summary</h3>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between py-2 border-b border-gray-700/50">
+                  <span className="text-sm text-gray-400">Total Transactions</span>
+                  <span className="text-sm font-semibold text-white">{ghaatTransactions.length}</span>
+                </div>
+                <div className="flex items-center justify-between py-2 border-b border-gray-700/50">
+                  <span className="text-sm text-gray-400">Buy Transactions</span>
+                  <span className="text-sm font-semibold text-amber-400">{ghaatTransactions.filter(t => t.type === 'buy').length}</span>
+                </div>
+                <div className="flex items-center justify-between py-2 border-b border-gray-700/50">
+                  <span className="text-sm text-gray-400">Sell Transactions</span>
+                  <span className="text-sm font-semibold text-emerald-400">{ghaatTransactions.filter(t => t.type === 'sell').length}</span>
+                </div>
+                <div className="flex items-center justify-between py-2 border-b border-gray-700/50">
+                  <span className="text-sm text-gray-400">Cash Labor Paid</span>
+                  <span className="text-sm font-semibold text-white">{new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(ghaatAnalytics.pnl.cashLaborPaid)}</span>
+                </div>
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-sm text-gray-400">Gold Labor Paid</span>
+                  <span className="text-sm font-semibold text-yellow-400">{ghaatAnalytics.pnl.goldLaborPaid.toFixed(3)} gm</span>
+                </div>
+              </div>
+            </Card>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 };

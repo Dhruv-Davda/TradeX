@@ -84,6 +84,48 @@ export interface Stock {
   notes?: string;
 }
 
+// Ghaat (Jewellery) types
+export type GhaatTransactionType = 'buy' | 'sell';
+export type LaborType = 'cash' | 'gold';
+
+export interface Karigar {
+  id: string;
+  name: string;
+  phone?: string;
+  address?: string;
+  notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface GhaatTransaction {
+  id: string;
+  type: GhaatTransactionType;
+  karigarId?: string;
+  karigarName?: string;
+  merchantId?: string;
+  merchantName?: string;
+  category: string;
+  units: number;
+  grossWeightPerUnit: number;
+  purity: number;
+  totalGrossWeight: number;
+  fineGold: number;
+  laborType?: LaborType;
+  laborAmount?: number;
+  amountReceived?: number;
+  notes?: string;
+  transactionDate?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface JewelleryCategory {
+  id: string;
+  name: string;
+  createdAt: Date;
+}
+
 export interface Analytics {
   totalRevenue: number;
   totalExpenses: number;
