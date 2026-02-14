@@ -1,603 +1,470 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
   History,
   Search,
-  Filter,
+  Download,
   Edit,
-  Trash2
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  Coins,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Card } from '../ui/Card';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
 import { Button } from '../ui/Button';
+import { EmptyState } from '../ui/EmptyState';
+import { PageSkeleton } from '../ui/Skeleton';
 import { TradeEditModal } from '../ui/TradeEditModal';
 import { Trade } from '../../types';
 import { formatCurrency, formatWeight } from '../../utils/calculations';
 import { TradeService } from '../../services/tradeService';
+import { getTradeTypeBadgeClasses } from '../../lib/constants';
+
+const ITEMS_PER_PAGE_OPTIONS = [10, 20, 50];
+
+const SORT_OPTIONS = [
+  { value: 'date_desc', label: 'Newest First' },
+  { value: 'date_asc', label: 'Oldest First' },
+  { value: 'amount_desc', label: 'Highest Amount' },
+  { value: 'amount_asc', label: 'Lowest Amount' },
+  { value: 'merchant', label: 'Merchant Name' },
+];
+
+const TYPE_PILLS = [
+  { value: 'all', label: 'All' },
+  { value: 'buy', label: 'Buy' },
+  { value: 'sell', label: 'Sell' },
+  { value: 'transfer', label: 'Transfer' },
+  { value: 'settlement', label: 'Settlement' },
+];
+
+const METAL_PILLS = [
+  { value: 'all', label: 'All Metals' },
+  { value: 'gold', label: 'Gold' },
+  { value: 'silver', label: 'Silver' },
+];
 
 export const TradeHistory: React.FC = () => {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Filters
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState<string[]>(['all']);
+  const [filterType, setFilterType] = useState('all');
   const [filterMetal, setFilterMetal] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [sortBy, setSortBy] = useState('date_desc');
-  const [showFilterModal, setShowFilterModal] = useState(false);
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+
+  // Edit modal
   const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
 
-  // Load trades from database
-  React.useEffect(() => {
-    const loadTrades = async () => {
-      try {
-        console.log('TradeHistory: Loading trades from database...');
-        const { trades: dbTrades, error } = await TradeService.getTrades();
-        if (error) {
-          console.error('TradeHistory: Error loading trades:', error);
-        } else {
-          console.log('TradeHistory: Loaded', dbTrades.length, 'trades from database');
-          setTrades(dbTrades);
-        }
-      } catch (error) {
-        console.error('TradeHistory: Unexpected error loading trades:', error);
-      } finally {
-        setIsLoading(false);
+  const loadTrades = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const { trades: dbTrades, error: tradesError } = await TradeService.getTrades();
+      if (tradesError) {
+        setError(tradesError);
+      } else {
+        setTrades(dbTrades);
       }
-    };
-
-    loadTrades();
+    } catch (err) {
+      setError(`Unexpected error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  // Handle edit trade - open modal
+  React.useEffect(() => { loadTrades(); }, [loadTrades]);
+
+  // Filter + Sort
+  const filteredTrades = useMemo(() => {
+    let filtered = trades.filter(trade => {
+      if (!trade) return false;
+
+      const merchantName = trade.merchantName || '';
+      const notes = trade.notes || '';
+      const matchesSearch = !searchTerm ||
+        merchantName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        notes.toLowerCase().includes(searchTerm.toLowerCase());
+
+      const matchesType = filterType === 'all' || trade.type === filterType;
+      const matchesMetal = filterMetal === 'all' || trade.metalType === filterMetal;
+
+      let matchesDate = true;
+      if (dateFrom || dateTo) {
+        const tradeDate = new Date(trade.tradeDate || trade.createdAt);
+        if (dateFrom) matchesDate = tradeDate >= new Date(dateFrom);
+        if (dateTo && matchesDate) matchesDate = tradeDate <= new Date(dateTo + 'T23:59:59');
+      }
+
+      return matchesSearch && matchesType && matchesMetal && matchesDate;
+    });
+
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case 'date_desc':
+          return new Date(b.tradeDate || b.createdAt).getTime() - new Date(a.tradeDate || a.createdAt).getTime();
+        case 'date_asc':
+          return new Date(a.tradeDate || a.createdAt).getTime() - new Date(b.tradeDate || b.createdAt).getTime();
+        case 'amount_desc':
+          return (b.totalAmount || 0) - (a.totalAmount || 0);
+        case 'amount_asc':
+          return (a.totalAmount || 0) - (b.totalAmount || 0);
+        case 'merchant':
+          return (a.merchantName || '').localeCompare(b.merchantName || '');
+        default:
+          return 0;
+      }
+    });
+
+    return filtered;
+  }, [trades, searchTerm, filterType, filterMetal, dateFrom, dateTo, sortBy]);
+
+  // Running totals
+  const summaryStats = useMemo(() => {
+    const totalBuy = filteredTrades.filter(t => t.type === 'buy').reduce((s, t) => s + (t.totalAmount || 0), 0);
+    const totalSell = filteredTrades.filter(t => t.type === 'sell').reduce((s, t) => s + (t.totalAmount || 0), 0);
+    const transferCount = filteredTrades.filter(t => t.type === 'transfer').length;
+    const settlementCount = filteredTrades.filter(t => t.type === 'settlement').length;
+    return { totalBuy, totalSell, net: totalSell - totalBuy, transferCount, settlementCount };
+  }, [filteredTrades]);
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(filteredTrades.length / itemsPerPage));
+  const paginatedTrades = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredTrades.slice(start, start + itemsPerPage);
+  }, [filteredTrades, currentPage, itemsPerPage]);
+
+  // Reset page when filters change
+  React.useEffect(() => { setCurrentPage(1); }, [searchTerm, filterType, filterMetal, dateFrom, dateTo, sortBy, itemsPerPage]);
+
+  const hasActiveFilters = filterType !== 'all' || filterMetal !== 'all' || dateFrom || dateTo || searchTerm;
+
+  const clearAllFilters = () => {
+    setSearchTerm('');
+    setFilterType('all');
+    setFilterMetal('all');
+    setDateFrom('');
+    setDateTo('');
+    setSortBy('date_desc');
+  };
+
+  // CSV Export
+  const exportCSV = () => {
+    const headers = ['Date', 'Type', 'Metal', 'Merchant', 'Weight', 'Price/Unit', 'Total Amount', 'Notes'];
+    const rows = filteredTrades.map(t => [
+      t.tradeDate ? format(new Date(t.tradeDate), 'yyyy-MM-dd') : format(new Date(t.createdAt), 'yyyy-MM-dd'),
+      t.type,
+      t.metalType || '',
+      t.merchantName || '',
+      t.weight?.toString() || '',
+      t.pricePerUnit?.toString() || '',
+      t.totalAmount?.toString() || '0',
+      (t.notes || '').replace(/,/g, ';'),
+    ]);
+    const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${c}"`).join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `trade-history-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Edit/Delete handlers
   const handleEditTrade = (trade: Trade) => {
     setEditingTrade(trade);
     setShowEditModal(true);
   };
 
-  // Handle trade updated callback
   const handleTradeUpdated = (updatedTrade: Trade) => {
-    setTrades(trades.map(t => t.id === updatedTrade.id ? updatedTrade : t));
+    setTrades(prev => prev.map(t => t.id === updatedTrade.id ? updatedTrade : t));
     setEditingTrade(null);
   };
 
-  // Handle trade deleted callback
   const handleTradeDeleted = (tradeId: string) => {
-    setTrades(trades.filter(t => t.id !== tradeId));
+    setTrades(prev => prev.filter(t => t.id !== tradeId));
     setEditingTrade(null);
   };
 
-  // Handle delete trade directly (without modal)
   const handleDeleteTrade = async (tradeId: string) => {
     if (!window.confirm('Are you sure you want to delete this trade?')) return;
-
     try {
       const { error } = await TradeService.deleteTrade(tradeId);
       if (error) {
-        console.error('Error deleting trade:', error);
         alert('Error deleting trade: ' + error);
         return;
       }
-
-      setTrades(trades.filter(trade => trade.id !== tradeId));
-      alert('Trade deleted successfully!');
-    } catch (error) {
-      console.error('Unexpected error deleting trade:', error);
+      setTrades(prev => prev.filter(t => t.id !== tradeId));
+    } catch (err) {
       alert('Unexpected error deleting trade');
     }
   };
 
-  const filteredAndSortedTrades = useMemo(() => {
-    try {
-      // Ensure trades is an array
-      if (!Array.isArray(trades)) {
-        return [];
-      }
+  if (isLoading) return <PageSkeleton cards={4} />;
 
-      if (trades.length === 0) {
-        return [];
-      }
-
-      let filtered = trades.filter((trade, index) => {
-        try {
-          // Ensure trade has required properties
-          if (!trade || typeof trade !== 'object') {
-            return false;
-          }
-
-          // More flexible property access using type assertion
-          const tradeAny = trade as any;
-          const merchantName = trade.merchantName || tradeAny.merchant || tradeAny.customerName || '';
-          const notes = trade.notes || tradeAny.description || '';
-          const tradeType = trade.type || tradeAny.transactionType || 'unknown';
-          const metalType = trade.metalType || tradeAny.metal || '';
-
-          const matchesSearch = merchantName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                               notes.toLowerCase().includes(searchTerm.toLowerCase());
-          
-          // Handle special settlement type filters (cash, bill)
-          let matchesType = filterType.includes('all') || filterType.includes(tradeType);
-          
-          if (filterType.includes('cash') && !matchesType) {
-            // Check if this trade has cash settlement type
-            const settlementType = trade.settlementType || tradeAny.settlementType;
-            matchesType = settlementType === 'cash';
-          }
-          
-          if (filterType.includes('bill') && !matchesType) {
-            // Check if this trade has bill settlement type
-            const settlementType = trade.settlementType || tradeAny.settlementType;
-            matchesType = settlementType === 'bill';
-          }
-          
-          const matchesMetal = filterMetal === 'all' || metalType === filterMetal;
-          
-          const shouldInclude = matchesSearch && matchesType && matchesMetal;
-          
-          return shouldInclude;
-        } catch (error) {
-          return false;
-        }
-      });
-
-      // Sort trades
-      filtered.sort((a, b) => {
-        try {
-          const aAny = a as any;
-          const bAny = b as any;
-          
-          switch (sortBy) {
-            case 'date_desc':
-              return new Date(b.createdAt || bAny.date || 0).getTime() - new Date(a.createdAt || aAny.date || 0).getTime();
-            case 'date_asc':
-              return new Date(a.createdAt || aAny.date || 0).getTime() - new Date(b.createdAt || bAny.date || 0).getTime();
-            case 'amount_desc':
-              return (b.totalAmount || bAny.amount || bAny.value || 0) - (a.totalAmount || aAny.amount || aAny.value || 0);
-            case 'amount_asc':
-              return (a.totalAmount || aAny.amount || aAny.value || 0) - (b.totalAmount || bAny.amount || bAny.value || 0);
-            case 'merchant':
-              const aMerchant = a.merchantName || aAny.merchant || aAny.customerName || '';
-              const bMerchant = b.merchantName || bAny.merchant || bAny.customerName || '';
-              return aMerchant.localeCompare(bMerchant);
-            default:
-              return 0;
-          }
-        } catch (error) {
-          console.error('❌ Error sorting trades:', error);
-          return 0;
-        }
-      });
-
-      return filtered;
-    } catch (error) {
-      return [];
-    }
-  }, [trades, searchTerm, filterType, filterMetal, sortBy]);
-
-
-  const typeOptions = [
-    { value: 'all', label: 'All Types' },
-    { value: 'buy', label: 'Buy' },
-    { value: 'sell', label: 'Sell' },
-    { value: 'transfer', label: 'Transfer' },
-    { value: 'settlement', label: 'Settlement' },
-    { value: 'cash', label: 'Cash' },
-    { value: 'bill', label: 'Bill' },
-  ];
-
-  const metalOptions = [
-    { value: 'all', label: 'All Metals' },
-    { value: 'gold', label: 'Gold' },
-    { value: 'silver', label: 'Silver' },
-  ];
-
-  const sortOptions = [
-    { value: 'date_desc', label: 'Newest First' },
-    { value: 'date_asc', label: 'Oldest First' },
-    { value: 'amount_desc', label: 'Highest Amount' },
-    { value: 'amount_asc', label: 'Lowest Amount' },
-    { value: 'merchant', label: 'Merchant Name' },
-  ];
-
-  const getTradeTypeColor = (type: string) => {
-    switch (type) {
-      case 'buy': return 'bg-green-500/20 text-green-400 border-green-500/30';
-      case 'sell': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
-      case 'transfer': return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
-      case 'settlement': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
-      default: return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
-    }
-  };
-
-  if (isLoading) {
+  if (error) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-400">Loading trade history...</p>
-        </div>
-      </div>
+      <EmptyState
+        icon={History}
+        title="Error Loading Trades"
+        description={error}
+        action={{ label: 'Try Again', onClick: loadTrades }}
+      />
     );
   }
 
   return (
-    <div className="space-y-6">
-      
+    <div className="space-y-5">
+      {/* Header */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center space-x-3"
+        className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"
       >
-        <div className="w-12 h-12 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-lg flex items-center justify-center">
-          <History className="w-6 h-6 text-white" />
+        <div className="flex items-center space-x-3">
+          <div className="w-11 h-11 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-xl flex items-center justify-center">
+            <History className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-white font-display">Trade History</h1>
+            <p className="text-gray-400 text-sm">View and manage all transactions</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-2xl font-bold text-white">Trade History</h1>
-          <p className="text-gray-400">View and manage all transactions</p>
-        </div>
+        <Button onClick={exportCSV} variant="outline" size="sm">
+          <Download className="w-4 h-4 mr-1.5" />
+          Export CSV
+        </Button>
       </motion.div>
 
-      {/* Filters */}
-      <Card className="p-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          <Input
-            placeholder="Search merchants or notes..."
-            icon={<Search className="w-4 h-4" />}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          <Select
-            options={typeOptions}
-            value={filterType.includes('all') ? 'all' : filterType[0] || 'all'}
-            onChange={(e) => {
-              if (e.target.value === 'all') {
-                setFilterType(['all']);
-              } else {
-                setFilterType([e.target.value]);
-              }
-            }}
-          />
-          <Select
-            options={metalOptions}
-            value={filterMetal}
-            onChange={(e) => setFilterMetal(e.target.value)}
-          />
-          <Select
-            options={sortOptions}
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-          />
-          <Button 
-            variant="outline" 
-            className="flex items-center"
-            onClick={() => setShowFilterModal(true)}
-          >
-            <Filter className="w-4 h-4 mr-2" />
-            Filter
-            {filterType.length > 1 || (filterType.length === 1 && !filterType.includes('all')) ? (
-              <span className="ml-2 px-2 py-1 bg-primary-500 text-white text-xs rounded-full">
-                {filterType.filter(f => f !== 'all').length}
-              </span>
-            ) : null}
-          </Button>
+      {/* Inline Filters */}
+      <Card className="p-4 space-y-3">
+        {/* Row 1: Search + Sort */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex-1">
+            <Input
+              placeholder="Search merchants or notes..."
+              icon={<Search className="w-4 h-4" />}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="w-full sm:w-48">
+            <Select
+              options={SORT_OPTIONS}
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* Row 2: Type pills */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-gray-500 font-medium uppercase tracking-wider mr-1">Type:</span>
+          {TYPE_PILLS.map(pill => (
+            <button
+              key={pill.value}
+              onClick={() => setFilterType(pill.value)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                filterType === pill.value
+                  ? pill.value === 'all'
+                    ? 'bg-white/10 text-white border-white/20'
+                    : `${getTradeTypeBadgeClasses(pill.value)} border`
+                  : 'bg-transparent text-gray-500 border-secondary-600/50 hover:text-gray-300 hover:border-secondary-500'
+              }`}
+            >
+              {pill.label}
+            </button>
+          ))}
+
+          <span className="text-gray-700 mx-1">|</span>
+
+          <span className="text-xs text-gray-500 font-medium uppercase tracking-wider mr-1">Metal:</span>
+          {METAL_PILLS.map(pill => (
+            <button
+              key={pill.value}
+              onClick={() => setFilterMetal(pill.value)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                filterMetal === pill.value
+                  ? pill.value === 'all'
+                    ? 'bg-white/10 text-white border-white/20'
+                    : pill.value === 'gold'
+                      ? 'bg-yellow-400/10 text-yellow-400 border-yellow-400/30'
+                      : 'bg-gray-400/10 text-gray-300 border-gray-400/30'
+                  : 'bg-transparent text-gray-500 border-secondary-600/50 hover:text-gray-300 hover:border-secondary-500'
+              }`}
+            >
+              {pill.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Row 3: Date range + Clear */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+          <span className="text-xs text-gray-500 font-medium uppercase tracking-wider">Date Range:</span>
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="bg-secondary-800/50 border border-secondary-600/50 rounded-lg px-3 py-1.5 text-sm text-gray-300 focus:border-primary-500 focus:outline-none transition-colors"
+            />
+            <span className="text-gray-500 text-sm">to</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="bg-secondary-800/50 border border-secondary-600/50 rounded-lg px-3 py-1.5 text-sm text-gray-300 focus:border-primary-500 focus:outline-none transition-colors"
+            />
+          </div>
+          {hasActiveFilters && (
+            <button
+              onClick={clearAllFilters}
+              className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 font-medium transition-colors ml-auto"
+            >
+              <X className="w-3 h-3" />
+              Clear All
+            </button>
+          )}
         </div>
       </Card>
 
-      {/* Results */}
-      <div className="space-y-4">
-        <div className="flex justify-between items-center">
-          <p className="text-gray-400">
-            Showing {filteredAndSortedTrades.length} of {Array.isArray(trades) ? trades.length : 0} transactions
-          </p>
-        </div>
-
-
-        {filteredAndSortedTrades.length > 0 ? (
-          <div className="space-y-3">
-            {filteredAndSortedTrades.map((trade, index) => {
-              try {
-                // Generate a key if id is missing
-                const tradeKey = trade?.id || `trade-${index}`;
-                
-                // Generate trade key for React rendering
-
-                if (!trade) {
-                  console.warn(`❌ Invalid trade in render ${index}:`, trade);
-                  return null;
-                }
-
-                const tradeAny = trade as any;
-
-              return (
-                <motion.div
-                  key={tradeKey}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                >
-                  <Card hover className="p-4">
-                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3 mb-2">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getTradeTypeColor(trade.type || tradeAny.transactionType || 'unknown')}`}>
-                            {(trade.type || tradeAny.transactionType || 'UNKNOWN').toUpperCase()}
-                          </span>
-                          {/* Show metal type badge only for Buy/Sell trades, or for Settlement if it's a metal settlement */}
-                          {((trade.type === 'buy' || trade.type === 'sell') && (trade.metalType || tradeAny.metal)) && (
-                            <span className="px-2 py-1 bg-gray-700 text-gray-300 rounded-full text-xs">
-                              {(trade.metalType || tradeAny.metal).toUpperCase()}
-                            </span>
-                          )}
-                          {/* Show settlement type badge (cash/bill) for Buy/Sell trades if present */}
-                          {(trade.type === 'buy' || trade.type === 'sell') && (trade.settlementType || tradeAny.settlementType) && (
-                            <span className="px-2 py-1 bg-gray-700 text-gray-300 rounded-full text-xs capitalize">
-                              {String(trade.settlementType || tradeAny.settlementType)}
-                            </span>
-                          )}
-                          {/* For settlements, show settlement type instead of metal type */}
-                          {trade.type === 'settlement' && (
-                            <span className="px-2 py-1 bg-gray-700 text-gray-300 rounded-full text-xs">
-                              {(trade.settlementType || tradeAny.settlementType || 'CASH').toUpperCase()}
-                            </span>
-                          )}
-                          <span className="text-xs text-gray-500">
-                            {trade.tradeDate ? format(new Date(trade.tradeDate), 'MMM dd, yyyy HH:mm') : 
-                             trade.createdAt ? format(new Date(trade.createdAt), 'MMM dd, yyyy HH:mm') : 'No date'}
-                          </span>
-                        </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-sm">
-                          <div>
-                            <span className="text-gray-400">Merchant:</span>
-                            <p className="text-white font-medium">{trade.merchantName || tradeAny.merchant || tradeAny.customerName || 'Unknown'}</p>
-                          </div>
-                          
-                          {/* Settlement specific details */}
-                          {trade.type === 'settlement' && (
-                            <>
-                              <div>
-                                <span className="text-gray-400">Settlement Type:</span>
-                                <p className="text-white font-medium capitalize">{trade.settlementType || tradeAny.settlementType || 'Unknown'}</p>
-                              </div>
-                              <div>
-                                <span className="text-gray-400">Direction:</span>
-                                <p className={`font-medium ${trade.settlementDirection === 'receiving' ? 'text-green-400' : 'text-orange-400'}`}>
-                                  {trade.settlementDirection === 'receiving' ? 'Receiving' : 'Paying'}
-                                </p>
-                              </div>
-                            </>
-                          )}
-                          
-                          {/* Buy/Sell specific details */}
-                          {(trade.type === 'buy' || trade.type === 'sell') && (
-                            <>
-                              {(trade.weight || tradeAny.quantity) && (trade.metalType || tradeAny.metal) && (
-                                <div>
-                                  <span className="text-gray-400">Weight:</span>
-                                  <p className="text-white">{formatWeight(trade.weight || tradeAny.quantity, (trade.metalType || tradeAny.metal) as 'gold' | 'silver')}</p>
-                                </div>
-                              )}
-                              
-                              {(trade.pricePerUnit || tradeAny.price || tradeAny.rate) && (
-                                <div>
-                                  <span className="text-gray-400">Price per Unit:</span>
-                                  <p className="text-white">{formatCurrency(trade.pricePerUnit || tradeAny.price || tradeAny.rate)}</p>
-                                </div>
-                              )}
-                              
-                              {trade.type === 'buy' && (trade.amountPaid !== undefined && trade.amountPaid !== null) && (
-                                <div>
-                                  <span className="text-gray-400">Amount Paid:</span>
-                                  <p className="text-white">{formatCurrency(trade.amountPaid)}</p>
-                                </div>
-                              )}
-                              
-                              {trade.type === 'sell' && (trade.amountReceived !== undefined && trade.amountReceived !== null) && (
-                                <div>
-                                  <span className="text-gray-400">Amount Received:</span>
-                                  <p className="text-white">{formatCurrency(trade.amountReceived)}</p>
-                                </div>
-                              )}
-                            </>
-                          )}
-                          
-                          {/* Transfer specific details */}
-                          {trade.type === 'transfer' && (
-                            <>
-                              {trade.pickupLocation && (
-                                <div>
-                                  <span className="text-gray-400">Pickup:</span>
-                                  <p className="text-white text-xs">{trade.pickupLocation}</p>
-                                </div>
-                              )}
-                              {trade.dropLocation && (
-                                <div>
-                                  <span className="text-gray-400">Drop:</span>
-                                  <p className="text-white text-xs">{trade.dropLocation}</p>
-                                </div>
-                              )}
-                              {trade.transferCharges && (
-                                <div>
-                                  <span className="text-gray-400">Transfer Charges:</span>
-                                  <p className="text-white">{formatCurrency(trade.transferCharges)}</p>
-                                </div>
-                              )}
-                            </>
-                          )}
-                          
-                          <div>
-                            <span className="text-gray-400">Total Amount:</span>
-                            <p className="text-white font-semibold">{formatCurrency(trade.totalAmount || tradeAny.amount || tradeAny.value || 0)}</p>
-                          </div>
-                        </div>
-
-                        {(trade.notes || tradeAny.description) && (
-                          <div className="mt-2">
-                            <span className="text-gray-400 text-sm">Notes:</span>
-                            <p className="text-gray-300 text-sm">{trade.notes || tradeAny.description}</p>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex space-x-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEditTrade(trade)}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteTrade(trade.id)}
-                          className="text-red-400 hover:text-red-300 hover:bg-red-400/10"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </Card>
-                </motion.div>
-              );
-              } catch (error) {
-                console.error(`❌ Error rendering trade ${index}:`, error, trade);
-                return (
-                  <div key={`error-${index}`} className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-                    <p className="text-red-400">Error displaying trade data</p>
-                    <p className="text-sm text-red-300 mt-1">Trade index: {index}</p>
-                    <p className="text-xs text-red-200 mt-1">Error: {error instanceof Error ? error.message : 'Unknown error'}</p>
-                  </div>
-                );
-              }
-            })}
-          </div>
-        ) : (
-          <Card className="p-8 text-center">
-            <History className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-            <p className="text-gray-400 mb-2">No transactions found</p>
-            <p className="text-sm text-gray-500">Try adjusting your filters or add some trades</p>
-          </Card>
+      {/* Summary Bar */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-1">
+        <span className="text-sm text-gray-400">
+          Showing <span className="text-white font-medium">{filteredTrades.length}</span> of{' '}
+          <span className="text-white font-medium">{trades.length}</span> trades
+        </span>
+        <span className="hidden sm:inline text-gray-700">|</span>
+        <span className="text-sm">
+          <span className="text-gray-400">Purchases: </span>
+          <span className="text-red-400 font-medium">{formatCurrency(summaryStats.totalBuy)}</span>
+        </span>
+        <span className="text-sm">
+          <span className="text-gray-400">Sales: </span>
+          <span className="text-green-400 font-medium">{formatCurrency(summaryStats.totalSell)}</span>
+        </span>
+        <span className="text-sm">
+          <span className="text-gray-400">Net: </span>
+          <span className={`font-semibold ${summaryStats.net >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+            {summaryStats.net >= 0 ? '+' : ''}{formatCurrency(summaryStats.net)}
+          </span>
+        </span>
+        {summaryStats.transferCount > 0 && (
+          <span className="text-sm text-gray-400">
+            Transfers: <span className="text-purple-400 font-medium">{summaryStats.transferCount}</span>
+          </span>
+        )}
+        {summaryStats.settlementCount > 0 && (
+          <span className="text-sm text-gray-400">
+            Settlements: <span className="text-amber-400 font-medium">{summaryStats.settlementCount}</span>
+          </span>
         )}
       </div>
 
-      {/* Filter Modal */}
-      {showFilterModal && (
-        <div 
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setShowFilterModal(false);
-            }
-          }}
-        >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-secondary-800 rounded-xl border border-white/10 p-6 w-full max-w-md max-h-[80vh] overflow-y-auto"
-          >
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold text-white">Filter Transactions</h3>
-              <button
-                onClick={() => setShowFilterModal(false)}
-                className="text-gray-400 hover:text-white transition-colors"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="space-y-6">
-              {/* Transaction Types */}
-              <div>
-                <h4 className="text-sm font-medium text-gray-300 mb-3">Transaction Types</h4>
-                <div className="space-y-2">
-                  {typeOptions.map(option => (
-                    <label key={option.value} className="flex items-center space-x-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={filterType.includes(option.value)}
-                        onChange={(e) => {
-                          if (option.value === 'all') {
-                            setFilterType(['all']);
-                          } else {
-                            const newFilters = e.target.checked
-                              ? [...filterType.filter(f => f !== 'all'), option.value]
-                              : filterType.filter(f => f !== option.value);
-                            setFilterType(newFilters.length === 0 ? ['all'] : newFilters);
-                          }
-                        }}
-                        className="w-4 h-4 text-primary-500 bg-secondary-700 border-secondary-600 rounded focus:ring-primary-500 focus:ring-2"
-                      />
-                      <span className="text-white text-sm">{option.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Metal Types */}
-              <div>
-                <h4 className="text-sm font-medium text-gray-300 mb-3">Metal Types</h4>
-                <div className="space-y-2">
-                  {metalOptions.map(option => (
-                    <label key={option.value} className="flex items-center space-x-3 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="metalType"
-                        checked={filterMetal === option.value}
-                        onChange={(e) => setFilterMetal(e.target.value)}
-                        className="w-4 h-4 text-primary-500 bg-secondary-700 border-secondary-600 focus:ring-primary-500 focus:ring-2"
-                      />
-                      <span className="text-white text-sm">{option.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Sort Options */}
-              <div>
-                <h4 className="text-sm font-medium text-gray-300 mb-3">Sort By</h4>
-                <div className="space-y-2">
-                  {sortOptions.map(option => (
-                    <label key={option.value} className="flex items-center space-x-3 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="sortBy"
-                        checked={sortBy === option.value}
-                        onChange={(e) => setSortBy(e.target.value)}
-                        className="w-4 h-4 text-primary-500 bg-secondary-700 border-secondary-600 focus:ring-primary-500 focus:ring-2"
-                      />
-                      <span className="text-white text-sm">{option.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex space-x-3 mt-8">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setFilterType(['all']);
-                  setFilterMetal('all');
-                  setSortBy('date_desc');
-                }}
-                className="flex-1"
-              >
-                Clear All
-              </Button>
-              <Button
-                onClick={() => setShowFilterModal(false)}
-                className="flex-1"
-              >
-                Apply Filters
-              </Button>
-            </div>
-          </motion.div>
+      {/* Trade Cards */}
+      {paginatedTrades.length > 0 ? (
+        <div className="space-y-3">
+          {paginatedTrades.map((trade, index) => (
+            <TradeCard
+              key={trade.id}
+              trade={trade}
+              index={index}
+              onEdit={handleEditTrade}
+              onDelete={handleDeleteTrade}
+            />
+          ))}
         </div>
+      ) : (
+        <EmptyState
+          icon={Coins}
+          title="No transactions found"
+          description={hasActiveFilters ? 'Try adjusting your filters' : 'Start by adding your first trade'}
+        />
+      )}
+
+      {/* Pagination */}
+      {filteredTrades.length > 0 && (
+        <Card className="p-3">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-400">Rows per page:</span>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                className="bg-secondary-800/50 border border-secondary-600/50 rounded-lg px-2 py-1 text-sm text-gray-300 focus:border-primary-500 focus:outline-none"
+              >
+                {ITEMS_PER_PAGE_OPTIONS.map(n => (
+                  <option key={n} value={n} className="bg-secondary-800">{n}</option>
+                ))}
+              </select>
+              <span className="text-sm text-gray-400">
+                {(currentPage - 1) * itemsPerPage + 1}–{Math.min(currentPage * itemsPerPage, filteredTrades.length)} of {filteredTrades.length}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage(p => p - 1)}
+              >
+                <ChevronLeft className="w-4 h-4 mr-1" />
+                Prev
+              </Button>
+              <div className="flex items-center gap-1">
+                {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                  let page: number;
+                  if (totalPages <= 5) {
+                    page = i + 1;
+                  } else if (currentPage <= 3) {
+                    page = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    page = totalPages - 4 + i;
+                  } else {
+                    page = currentPage - 2 + i;
+                  }
+                  return (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
+                        currentPage === page
+                          ? 'bg-primary-500 text-white'
+                          : 'text-gray-400 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  );
+                })}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage(p => p + 1)}
+              >
+                Next
+                <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        </Card>
       )}
 
       {/* Edit Trade Modal */}
@@ -614,3 +481,160 @@ export const TradeHistory: React.FC = () => {
     </div>
   );
 };
+
+// ── Trade Card Component ──────────────────────────────────────
+
+interface TradeCardProps {
+  trade: Trade;
+  index: number;
+  onEdit: (trade: Trade) => void;
+  onDelete: (id: string) => void;
+}
+
+const TradeCard: React.FC<TradeCardProps> = ({ trade, index, onEdit, onDelete }) => {
+  const tradeDate = trade.tradeDate || trade.createdAt;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: Math.min(index * 0.02, 0.3) }}
+    >
+      <Card className="p-4">
+        <div className="flex flex-col lg:flex-row justify-between gap-3">
+          {/* Left: Content */}
+          <div className="flex-1 min-w-0 space-y-2">
+            {/* Row 1: Badges + Date */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase border ${getTradeTypeBadgeClasses(trade.type)}`}>
+                {trade.type}
+              </span>
+              {(trade.type === 'buy' || trade.type === 'sell') && trade.metalType && (
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase ${
+                  trade.metalType === 'gold'
+                    ? 'bg-yellow-400/10 text-yellow-400'
+                    : 'bg-gray-400/10 text-gray-300'
+                }`}>
+                  {trade.metalType}
+                </span>
+              )}
+              {trade.type === 'settlement' && trade.settlementType && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-gray-700 text-gray-300">
+                  {trade.settlementType}
+                </span>
+              )}
+              {(trade.type === 'buy' || trade.type === 'sell') && trade.settlementType && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium capitalize bg-gray-700/50 text-gray-400">
+                  {trade.settlementType}
+                </span>
+              )}
+              <span className="text-[11px] text-gray-500 ml-auto sm:ml-0">
+                {tradeDate ? format(new Date(tradeDate), 'MMM dd, yyyy') : 'No date'}
+              </span>
+            </div>
+
+            {/* Row 2: Merchant Name */}
+            <p className="text-sm font-semibold text-white truncate">
+              {trade.merchantName || 'Unknown'}
+            </p>
+
+            {/* Row 3: Details Grid */}
+            <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+              {/* Buy/Sell details */}
+              {(trade.type === 'buy' || trade.type === 'sell') && (
+                <>
+                  {trade.weight != null && trade.metalType && (
+                    <Detail label="Weight" value={formatWeight(trade.weight, trade.metalType as 'gold' | 'silver')} />
+                  )}
+                  {trade.pricePerUnit != null && (
+                    <Detail label={`Rate/${trade.metalType === 'gold' ? '10g' : 'kg'}`} value={formatCurrency(trade.pricePerUnit)} />
+                  )}
+                  {trade.type === 'buy' && trade.amountPaid != null && (
+                    <Detail label="Paid" value={formatCurrency(trade.amountPaid)} />
+                  )}
+                  {trade.type === 'sell' && trade.amountReceived != null && (
+                    <Detail label="Received" value={formatCurrency(trade.amountReceived)} />
+                  )}
+                  {trade.type === 'buy' && trade.amountPaid != null && trade.amountPaid < trade.totalAmount && (
+                    <Detail label="Due" value={formatCurrency(trade.totalAmount - trade.amountPaid)} valueClass="text-red-400" />
+                  )}
+                  {trade.type === 'sell' && trade.amountReceived != null && trade.amountReceived < trade.totalAmount && (
+                    <Detail label="Receivable" value={formatCurrency(trade.totalAmount - trade.amountReceived)} valueClass="text-orange-400" />
+                  )}
+                </>
+              )}
+
+              {/* Settlement details */}
+              {trade.type === 'settlement' && (
+                <>
+                  {trade.settlementType && (
+                    <Detail label="Type" value={trade.settlementType} capitalize />
+                  )}
+                  {trade.settlementDirection && (
+                    <Detail
+                      label="Direction"
+                      value={trade.settlementDirection === 'receiving' ? 'Receiving' : 'Paying'}
+                      valueClass={trade.settlementDirection === 'receiving' ? 'text-green-400' : 'text-orange-400'}
+                    />
+                  )}
+                </>
+              )}
+
+              {/* Transfer details */}
+              {trade.type === 'transfer' && (
+                <>
+                  {trade.pickupLocation && <Detail label="Pickup" value={trade.pickupLocation} />}
+                  {trade.dropLocation && <Detail label="Drop" value={trade.dropLocation} />}
+                  {trade.transferCharges != null && trade.transferCharges > 0 && (
+                    <Detail label="Charges" value={formatCurrency(trade.transferCharges)} />
+                  )}
+                </>
+              )}
+
+              <Detail label="Total" value={formatCurrency(trade.totalAmount || 0)} valueClass="text-white font-semibold" />
+            </div>
+
+            {/* Row 4: Notes */}
+            {trade.notes && (
+              <p className="text-xs text-gray-500 truncate">
+                <span className="text-gray-600">Note:</span> {trade.notes}
+              </p>
+            )}
+          </div>
+
+          {/* Right: Actions */}
+          <div className="flex lg:flex-col items-center gap-1 shrink-0">
+            <button
+              onClick={() => onEdit(trade)}
+              className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+              title="Edit"
+            >
+              <Edit className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => onDelete(trade.id)}
+              className="p-2 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-400/10 transition-colors"
+              title="Delete"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </Card>
+    </motion.div>
+  );
+};
+
+// ── Detail Inline ─────────────────────────────────────────────
+
+const Detail: React.FC<{
+  label: string;
+  value: string;
+  valueClass?: string;
+  capitalize?: boolean;
+}> = ({ label, value, valueClass = 'text-white', capitalize }) => (
+  <div className="flex items-baseline gap-1.5">
+    <span className="text-gray-500 text-xs">{label}:</span>
+    <span className={`text-sm ${valueClass} ${capitalize ? 'capitalize' : ''}`}>{value}</span>
+  </div>
+);

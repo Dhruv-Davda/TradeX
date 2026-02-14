@@ -122,6 +122,21 @@ export const formatCurrencyInCR = (amount: number): string => {
   return `${crAmount.toFixed(1)} CR`;
 };
 
+export const formatCurrencyCompact = (amount: number): string => {
+  const abs = Math.abs(amount);
+  const sign = amount < 0 ? '-' : '';
+  if (abs >= 10000000) {
+    return `${sign}₹${(abs / 10000000).toFixed(2)} Cr`;
+  }
+  if (abs >= 100000) {
+    return `${sign}₹${(abs / 100000).toFixed(2)} L`;
+  }
+  if (abs >= 1000) {
+    return `${sign}₹${(abs / 1000).toFixed(1)} K`;
+  }
+  return formatCurrency(amount);
+};
+
 export const formatWeight = (weight: number | string | undefined, metalType: 'gold' | 'silver'): string => {
   const unit = metalType === 'gold' ? 'g' : 'kg';
   const numericWeight = Number(weight) || 0;
