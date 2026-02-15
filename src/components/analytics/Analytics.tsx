@@ -13,7 +13,8 @@ import {
   Pie,
   Cell,
   LineChart,
-  Line
+  Line,
+  Legend,
 } from 'recharts';
 import { Card } from '../ui/Card';
 import { StatCard } from '../ui/StatCard';
@@ -24,7 +25,7 @@ import { IncomeService } from '../../services/incomeService';
 import { ExpensesService } from '../../services/expensesService';
 import { StockService } from '../../services/stockService';
 import { ManualNetProfitService } from '../../services/manualNetProfitService';
-import { GhaatService } from '../../services/ghaatService';
+import { GhaatService, GhaatMonthlyProfit } from '../../services/ghaatService';
 import { formatCurrency, formatCurrencyCompact, formatCurrencyInCR } from '../../utils/calculations';
 import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths, isWithinInterval } from 'date-fns';
 import { MonthYearPicker } from '../ui/MonthYearPicker';
@@ -259,6 +260,7 @@ export const Analytics: React.FC = () => {
     const pnl = GhaatService.calculatePnL(ghaatTransactions);
     const stockItems = GhaatService.calculateStock(ghaatTransactions);
     const totalStockFineGold = stockItems.reduce((sum, item) => sum + item.totalFineGold, 0);
+    const monthlyProfit = GhaatService.calculateMonthlyProfit(ghaatTransactions);
 
     // Category distribution for pie chart
     const categoryData = stockItems
@@ -269,7 +271,11 @@ export const Analytics: React.FC = () => {
         color: JEWELLERY_CATEGORY_COLORS[item.category] || '#6b7280',
       }));
 
-    return { pnl, totalStockFineGold, categoryData };
+    // Counts
+    const pendingCount = ghaatTransactions.filter(t => t.type === 'sell' && t.status === 'pending').length;
+    const soldCount = ghaatTransactions.filter(t => t.type === 'sell' && t.status === 'sold').length;
+
+    return { pnl, totalStockFineGold, categoryData, monthlyProfit, pendingCount, soldCount };
   }, [ghaatTransactions]);
 
   if (isLoading) return <PageSkeleton cards={5} />;
@@ -626,6 +632,45 @@ export const Analytics: React.FC = () => {
         />
       </div>
 
+      {/* Monthly Jewellery Profit Chart */}
+      {ghaatAnalytics.monthlyProfit.length > 0 && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.78 }}>
+          <Card className="p-5">
+            <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Monthly Jewellery Profit (Fine Gold gm)</h3>
+            <div style={{ height: 280 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={ghaatAnalytics.monthlyProfit}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+                  <XAxis dataKey="month" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis
+                    stroke="#9ca3af"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v: number) => `${v.toFixed(1)}`}
+                    width={45}
+                  />
+                  <Tooltip
+                    contentStyle={DARK_TOOLTIP_STYLE}
+                    formatter={(value: number, name: string) => [
+                      `${value.toFixed(3)} gm`,
+                      name === 'stockDeltaProfit' ? 'Stock Delta' : 'Transaction P&L',
+                    ]}
+                    labelStyle={{ color: '#9ca3af' }}
+                  />
+                  <Legend
+                    formatter={(value: string) => value === 'stockDeltaProfit' ? 'Stock Delta' : 'Transaction P&L'}
+                    wrapperStyle={{ fontSize: 11 }}
+                  />
+                  <Bar dataKey="stockDeltaProfit" fill="#f59e0b" name="stockDeltaProfit" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="transactionProfit" fill="#10b981" name="transactionProfit" radius={[2, 2, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+        </motion.div>
+      )}
+
       {/* Category Stock Distribution */}
       {ghaatAnalytics.categoryData.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -684,8 +729,12 @@ export const Analytics: React.FC = () => {
                   <span className="text-sm font-semibold text-amber-400">{ghaatTransactions.filter(t => t.type === 'buy').length}</span>
                 </div>
                 <div className="flex items-center justify-between py-2 border-b border-gray-700/50">
-                  <span className="text-sm text-gray-400">Sell Transactions</span>
-                  <span className="text-sm font-semibold text-emerald-400">{ghaatTransactions.filter(t => t.type === 'sell').length}</span>
+                  <span className="text-sm text-gray-400">Pending Sales</span>
+                  <span className="text-sm font-semibold text-amber-400">{ghaatAnalytics.pendingCount}</span>
+                </div>
+                <div className="flex items-center justify-between py-2 border-b border-gray-700/50">
+                  <span className="text-sm text-gray-400">Confirmed Sales</span>
+                  <span className="text-sm font-semibold text-emerald-400">{ghaatAnalytics.soldCount}</span>
                 </div>
                 <div className="flex items-center justify-between py-2 border-b border-gray-700/50">
                   <span className="text-sm text-gray-400">Cash Labor Paid</span>

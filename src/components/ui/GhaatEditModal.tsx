@@ -6,7 +6,8 @@ import { Select } from './Select';
 import { Button } from './Button';
 import { GhaatTransaction } from '../../types';
 import { GhaatService } from '../../services/ghaatService';
-import { DEFAULT_JEWELLERY_CATEGORIES } from '../../lib/constants';
+import { DEFAULT_JEWELLERY_CATEGORIES, GHAAT_STATUS_COLORS } from '../../lib/constants';
+import { formatCurrency } from '../../utils/calculations';
 
 interface EditGhaatFormData {
   category: string;
@@ -59,6 +60,9 @@ export const GhaatEditModal: React.FC<GhaatEditModalProps> = ({
       setValue('date', txnDate);
     }
   }, [transaction, isOpen, setValue]);
+
+  const isSold = transaction?.type === 'sell' && transaction?.status === 'sold';
+  const isPending = transaction?.type === 'sell' && transaction?.status === 'pending';
 
   // Auto-calculate display values
   const units = Number(watchedValues.units) || 0;
@@ -126,6 +130,71 @@ export const GhaatEditModal: React.FC<GhaatEditModalProps> = ({
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title={`Edit ${transaction?.type === 'buy' ? 'Buy' : 'Sell'} Transaction`}>
+      {/* Status Badge */}
+      {transaction?.type === 'sell' && transaction.status && (
+        <div className="mb-4">
+          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${GHAAT_STATUS_COLORS[transaction.status].bg} ${GHAAT_STATUS_COLORS[transaction.status].text} border ${GHAAT_STATUS_COLORS[transaction.status].border}`}>
+            {transaction.status === 'pending' ? 'Pending with Merchant' : 'Sold & Confirmed'}
+          </span>
+          {transaction.merchantName && (
+            <span className="ml-2 text-sm text-gray-400">— {transaction.merchantName}</span>
+          )}
+        </div>
+      )}
+
+      {/* Sold Transaction — Read-only Confirmation Details */}
+      {isSold && (
+        <div className="mb-4 p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-lg space-y-3">
+          <h4 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">Confirmation Details</h4>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <span className="text-gray-500 block">Rate / 10gm</span>
+              <span className="text-white font-medium">{formatCurrency(transaction?.ratePer10gm || 0)}</span>
+            </div>
+            <div>
+              <span className="text-gray-500 block">Total Amount</span>
+              <span className="text-white font-medium">{formatCurrency(transaction?.totalAmount || 0)}</span>
+            </div>
+            <div>
+              <span className="text-gray-500 block">Confirmed Units</span>
+              <span className="text-white font-medium">{transaction?.confirmedUnits} pcs</span>
+            </div>
+            <div>
+              <span className="text-gray-500 block">Confirmed Fine Gold</span>
+              <span className="text-yellow-400 font-medium">{transaction?.confirmedFineGold?.toFixed(3)} gm</span>
+            </div>
+            <div>
+              <span className="text-gray-500 block">Settlement</span>
+              <span className="text-white font-medium capitalize">{transaction?.settlementType || '-'}</span>
+            </div>
+            <div>
+              <span className="text-gray-500 block">Confirmed Date</span>
+              <span className="text-white font-medium">{transaction?.confirmedDate || '-'}</span>
+            </div>
+            {(transaction?.settlementType === 'gold' || transaction?.settlementType === 'mixed') && (
+              <div>
+                <span className="text-gray-500 block">Gold Returned</span>
+                <span className="text-yellow-400 font-medium">
+                  {transaction?.goldReturnedWeight?.toFixed(3)} gm @ {transaction?.goldReturnedPurity}% = {transaction?.goldReturnedFine?.toFixed(3)} gm fine
+                </span>
+              </div>
+            )}
+            {(transaction?.settlementType === 'cash' || transaction?.settlementType === 'mixed') && (
+              <div>
+                <span className="text-gray-500 block">Cash Received</span>
+                <span className="text-green-400 font-medium">{formatCurrency(transaction?.cashReceived || 0)}</span>
+              </div>
+            )}
+            {(transaction?.duesShortfall || 0) > 0 && (
+              <div>
+                <span className="text-gray-500 block">Dues Shortfall</span>
+                <span className="text-red-400 font-medium">{formatCurrency(transaction?.duesShortfall || 0)}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit(handleUpdate)} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -214,8 +283,8 @@ export const GhaatEditModal: React.FC<GhaatEditModalProps> = ({
           </div>
         </div>
 
-        {/* Amount Received (sell only) */}
-        {transaction?.type === 'sell' && (
+        {/* Amount Received (legacy sell only — no status) */}
+        {transaction?.type === 'sell' && !transaction.status && (
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">Amount Received (₹)</label>
             <Input
@@ -250,8 +319,8 @@ export const GhaatEditModal: React.FC<GhaatEditModalProps> = ({
           <Button type="button" variant="outline" onClick={handleClose} className="flex-1">
             Cancel
           </Button>
-          <Button type="submit" className="flex-1">
-            Update
+          <Button type="submit" className="flex-1" disabled={isSold}>
+            {isSold ? 'Read Only' : 'Update'}
           </Button>
         </div>
       </form>

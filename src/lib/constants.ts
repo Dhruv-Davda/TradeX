@@ -189,6 +189,11 @@ export const GHAAT_TRANSACTION_COLORS = {
   sell: { bg: 'bg-emerald-500/20', text: 'text-emerald-400', border: 'border-emerald-500/30', hex: '#10b981' },
 } as const;
 
+export const GHAAT_STATUS_COLORS = {
+  pending: { bg: 'bg-amber-500/20', text: 'text-amber-400', border: 'border-amber-500/30' },
+  sold: { bg: 'bg-emerald-500/20', text: 'text-emerald-400', border: 'border-emerald-500/30' },
+} as const;
+
 export const JEWELLERY_CATEGORY_COLORS: Record<string, string> = {
   'Bracelets': '#f59e0b',
   'Chains': '#3b82f6',

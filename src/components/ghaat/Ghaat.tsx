@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Gem, ShoppingCart, TrendingUp, Package, ChevronDown, ChevronUp } from 'lucide-react';
+import { Gem, ShoppingCart, TrendingUp, Package, ChevronDown, ChevronUp, Scale, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
@@ -47,7 +47,13 @@ export const Ghaat: React.FC = () => {
 
   // Total stats
   const totalUnits = stock.reduce((s, item) => s + item.units, 0);
+  const totalGrossWeight = stock.reduce((s, item) => s + item.totalGrossWeight, 0);
   const totalFineGold = stock.reduce((s, item) => s + item.totalFineGold, 0);
+
+  // Pending items summary
+  const pendingTxns = transactions.filter(t => t.type === 'sell' && t.status === 'pending');
+  const pendingUnits = pendingTxns.reduce((s, t) => s + t.units, 0);
+  const pendingFineGold = pendingTxns.reduce((s, t) => s + t.fineGold, 0);
 
   // Get stock for a specific category
   const getStockForCategory = (category: string): GhaatStockItem | undefined => {
@@ -110,7 +116,7 @@ export const Ghaat: React.FC = () => {
       </motion.div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Total Units in Stock"
           value={`${totalUnits} pcs`}
@@ -119,18 +125,25 @@ export const Ghaat: React.FC = () => {
           animationDelay={0}
         />
         <StatCard
-          label="Total Fine Gold in Stock"
+          label="Total Gross Weight"
+          value={`${totalGrossWeight.toFixed(3)} gm`}
+          icon={Scale}
+          variant="silver"
+          animationDelay={0.05}
+        />
+        <StatCard
+          label="Total Fine Gold"
           value={`${totalFineGold.toFixed(3)} gm`}
           icon={Gem}
           variant="gold"
-          animationDelay={0.05}
+          animationDelay={0.1}
         />
         <StatCard
           label="Net Gold P&L"
           value={`${pnl.netGoldProfit >= 0 ? '+' : ''}${pnl.netGoldProfit.toFixed(3)} gm`}
           icon={TrendingUp}
           variant={pnl.netGoldProfit >= 0 ? 'success' : 'danger'}
-          animationDelay={0.1}
+          animationDelay={0.15}
           subtitle={
             <span className="text-[11px] text-gray-500">
               Sold: {pnl.totalSellFineGold.toFixed(3)} gm | Bought: {pnl.totalBuyFineGold.toFixed(3)} gm | Labor: {pnl.goldLaborPaid.toFixed(3)} gm
@@ -138,6 +151,26 @@ export const Ghaat: React.FC = () => {
           }
         />
       </div>
+
+      {/* Pending with Merchants */}
+      {pendingUnits > 0 && (
+        <Card className="p-4 border-amber-500/20">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-amber-500/20 rounded-lg flex items-center justify-center">
+                <Clock className="w-4 h-4 text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-amber-400">Pending with Merchants</h3>
+                <p className="text-xs text-gray-500">{pendingUnits} pcs | {pendingFineGold.toFixed(3)} gm fine gold currently with merchants</p>
+              </div>
+            </div>
+            <Button onClick={() => navigate('/ghaat-sell')} variant="outline" size="sm" className="text-amber-400 border-amber-500/30">
+              View
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {/* Category Grid */}
       {transactions.length === 0 ? (
@@ -181,7 +214,7 @@ export const Ghaat: React.FC = () => {
                       <div className="text-left">
                         <h3 className="text-white font-semibold">{category}</h3>
                         <p className="text-sm text-gray-400">
-                          {units} pcs • {fineGold.toFixed(3)} gm fine gold
+                          {units} pcs • {(catStock?.totalGrossWeight || 0).toFixed(3)} gm gross • {fineGold.toFixed(3)} gm fine
                         </p>
                       </div>
                     </div>

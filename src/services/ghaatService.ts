@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { GhaatTransaction } from '../types';
+import { GhaatTransaction, GhaatSettlementType, PendingGhaatSaleGroup } from '../types';
 
 export interface DatabaseGhaatTransaction {
   id: string;
@@ -23,6 +23,21 @@ export interface DatabaseGhaatTransaction {
   transaction_date: string | null;
   created_at: string;
   updated_at: string;
+  // Pending/Sold status flow columns
+  status: string | null;
+  group_id: string | null;
+  rate_per_10gm: number | null;
+  total_amount: number | null;
+  settlement_type: string | null;
+  gold_returned_weight: number | null;
+  gold_returned_purity: number | null;
+  gold_returned_fine: number | null;
+  cash_received: number | null;
+  confirmed_date: string | null;
+  confirmed_units: number | null;
+  confirmed_gross_weight: number | null;
+  confirmed_fine_gold: number | null;
+  dues_shortfall: number | null;
 }
 
 export interface GhaatStockItem {
@@ -38,6 +53,19 @@ export interface GhaatPnL {
   goldLaborPaid: number;
   cashLaborPaid: number;
   netGoldProfit: number;
+}
+
+export interface GhaatMonthlyProfit {
+  month: string;
+  // Stock delta method
+  startFineGold: number;
+  endFineGold: number;
+  stockDeltaProfit: number;
+  // Transaction-based method
+  buyFineGold: number;
+  sellFineGold: number;
+  laborGold: number;
+  transactionProfit: number;
 }
 
 export class GhaatService {
@@ -62,6 +90,21 @@ export class GhaatService {
       transactionDate: db.transaction_date || undefined,
       createdAt: new Date(db.created_at),
       updatedAt: new Date(db.updated_at),
+      // Pending/Sold fields
+      status: (db.status as 'pending' | 'sold') || undefined,
+      groupId: db.group_id || undefined,
+      ratePer10gm: db.rate_per_10gm ? Number(db.rate_per_10gm) : undefined,
+      totalAmount: db.total_amount ? Number(db.total_amount) : undefined,
+      settlementType: (db.settlement_type as GhaatSettlementType) || undefined,
+      goldReturnedWeight: db.gold_returned_weight ? Number(db.gold_returned_weight) : undefined,
+      goldReturnedPurity: db.gold_returned_purity ? Number(db.gold_returned_purity) : undefined,
+      goldReturnedFine: db.gold_returned_fine ? Number(db.gold_returned_fine) : undefined,
+      cashReceived: db.cash_received ? Number(db.cash_received) : undefined,
+      confirmedDate: db.confirmed_date || undefined,
+      confirmedUnits: db.confirmed_units ? Number(db.confirmed_units) : undefined,
+      confirmedGrossWeight: db.confirmed_gross_weight ? Number(db.confirmed_gross_weight) : undefined,
+      confirmedFineGold: db.confirmed_fine_gold ? Number(db.confirmed_fine_gold) : undefined,
+      duesShortfall: db.dues_shortfall ? Number(db.dues_shortfall) : undefined,
     };
   }
 
@@ -85,6 +128,21 @@ export class GhaatService {
       amount_received: txn.amountReceived ?? null,
       notes: txn.notes || null,
       transaction_date: txn.transactionDate || null,
+      // Pending/Sold fields
+      status: txn.status || null,
+      group_id: txn.groupId || null,
+      rate_per_10gm: txn.ratePer10gm ?? null,
+      total_amount: txn.totalAmount ?? null,
+      settlement_type: txn.settlementType || null,
+      gold_returned_weight: txn.goldReturnedWeight ?? null,
+      gold_returned_purity: txn.goldReturnedPurity ?? null,
+      gold_returned_fine: txn.goldReturnedFine ?? null,
+      cash_received: txn.cashReceived ?? null,
+      confirmed_date: txn.confirmedDate || null,
+      confirmed_units: txn.confirmedUnits ?? null,
+      confirmed_gross_weight: txn.confirmedGrossWeight ?? null,
+      confirmed_fine_gold: txn.confirmedFineGold ?? null,
+      dues_shortfall: txn.duesShortfall ?? null,
     };
   }
 
@@ -171,6 +229,21 @@ export class GhaatService {
       if (updates.amountReceived !== undefined) dbUpdates.amount_received = updates.amountReceived;
       if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
       if (updates.transactionDate !== undefined) dbUpdates.transaction_date = updates.transactionDate;
+      // Pending/Sold fields
+      if (updates.status !== undefined) dbUpdates.status = updates.status;
+      if (updates.groupId !== undefined) dbUpdates.group_id = updates.groupId;
+      if (updates.ratePer10gm !== undefined) dbUpdates.rate_per_10gm = updates.ratePer10gm;
+      if (updates.totalAmount !== undefined) dbUpdates.total_amount = updates.totalAmount;
+      if (updates.settlementType !== undefined) dbUpdates.settlement_type = updates.settlementType;
+      if (updates.goldReturnedWeight !== undefined) dbUpdates.gold_returned_weight = updates.goldReturnedWeight;
+      if (updates.goldReturnedPurity !== undefined) dbUpdates.gold_returned_purity = updates.goldReturnedPurity;
+      if (updates.goldReturnedFine !== undefined) dbUpdates.gold_returned_fine = updates.goldReturnedFine;
+      if (updates.cashReceived !== undefined) dbUpdates.cash_received = updates.cashReceived;
+      if (updates.confirmedDate !== undefined) dbUpdates.confirmed_date = updates.confirmedDate;
+      if (updates.confirmedUnits !== undefined) dbUpdates.confirmed_units = updates.confirmedUnits;
+      if (updates.confirmedGrossWeight !== undefined) dbUpdates.confirmed_gross_weight = updates.confirmedGrossWeight;
+      if (updates.confirmedFineGold !== undefined) dbUpdates.confirmed_fine_gold = updates.confirmedFineGold;
+      if (updates.duesShortfall !== undefined) dbUpdates.dues_shortfall = updates.duesShortfall;
 
       const { data, error } = await supabase
         .from('ghaat_transactions')
@@ -215,6 +288,157 @@ export class GhaatService {
     }
   }
 
+  static async getPendingSales(): Promise<{ groups: PendingGhaatSaleGroup[]; error: string | null }> {
+    try {
+      const ctx = await this.getUserContext();
+      if (!ctx) return { groups: [], error: 'User not authenticated' };
+
+      const { data, error } = await supabase
+        .from('ghaat_transactions')
+        .select('*')
+        .eq('user_email', ctx.userEmail)
+        .eq('type', 'sell')
+        .eq('status', 'pending')
+        .order('transaction_date', { ascending: false });
+
+      if (error) return { groups: [], error: error.message };
+
+      const transactions = data.map(this.convertToApp);
+
+      // Group by group_id
+      const groupMap = new Map<string, GhaatTransaction[]>();
+      for (const txn of transactions) {
+        const key = txn.groupId || txn.id;
+        const arr = groupMap.get(key) || [];
+        arr.push(txn);
+        groupMap.set(key, arr);
+      }
+
+      const groups: PendingGhaatSaleGroup[] = [];
+      groupMap.forEach((items, groupId) => {
+        const first = items[0];
+        groups.push({
+          groupId,
+          merchantId: first.merchantId || '',
+          merchantName: first.merchantName || '',
+          dateGiven: first.transactionDate || '',
+          items,
+          totalUnits: items.reduce((s, i) => s + i.units, 0),
+          totalGrossWeight: items.reduce((s, i) => s + i.totalGrossWeight, 0),
+          totalFineGold: items.reduce((s, i) => s + i.fineGold, 0),
+        });
+      });
+
+      return { groups, error: null };
+    } catch (error) {
+      return { groups: [], error: 'An unexpected error occurred' };
+    }
+  }
+
+  static async confirmSale(params: {
+    groupId: string;
+    confirmedItems: Array<{
+      transactionId: string;
+      confirmedUnits: number;
+      confirmedGrossWeight: number;
+      confirmedFineGold: number;
+      returnedUnits: number;
+      originalPurity: number;
+      originalGrossWeightPerUnit: number;
+      originalCategory: string;
+      originalMerchantId: string;
+      originalMerchantName: string;
+    }>;
+    ratePer10gm: number;
+    settlementType: GhaatSettlementType;
+    goldReturnedWeight?: number;
+    goldReturnedPurity?: number;
+    cashReceived?: number;
+    confirmedDate: string;
+  }): Promise<{ success: boolean; duesShortfall: number; error: string | null }> {
+    try {
+      const ctx = await this.getUserContext();
+      if (!ctx) return { success: false, duesShortfall: 0, error: 'User not authenticated' };
+
+      // Calculate totals
+      const totalConfirmedFineGold = params.confirmedItems.reduce(
+        (s, i) => s + i.confirmedFineGold, 0
+      );
+      const totalAmount = totalConfirmedFineGold * params.ratePer10gm / 10;
+
+      // Calculate gold returned fine value
+      const goldReturnedFine = (params.goldReturnedWeight && params.goldReturnedPurity)
+        ? params.goldReturnedWeight * params.goldReturnedPurity / 100
+        : 0;
+      const goldReturnedValue = goldReturnedFine * params.ratePer10gm / 10;
+
+      const cashReceived = params.cashReceived || 0;
+      const totalReceived = goldReturnedValue + cashReceived;
+      const duesShortfall = Math.max(0, totalAmount - totalReceived);
+
+      // Update each line item to sold
+      for (const item of params.confirmedItems) {
+        const itemTotalAmount = item.confirmedFineGold * params.ratePer10gm / 10;
+        const { error } = await supabase
+          .from('ghaat_transactions')
+          .update({
+            status: 'sold',
+            rate_per_10gm: params.ratePer10gm,
+            total_amount: itemTotalAmount,
+            settlement_type: params.settlementType,
+            gold_returned_weight: params.goldReturnedWeight ?? null,
+            gold_returned_purity: params.goldReturnedPurity ?? null,
+            gold_returned_fine: goldReturnedFine || null,
+            cash_received: cashReceived || null,
+            confirmed_date: params.confirmedDate,
+            confirmed_units: item.confirmedUnits,
+            confirmed_gross_weight: item.confirmedGrossWeight,
+            confirmed_fine_gold: item.confirmedFineGold,
+            dues_shortfall: params.confirmedItems.length > 0 ? duesShortfall / params.confirmedItems.length : 0,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', item.transactionId)
+          .eq('user_email', ctx.userEmail);
+
+        if (error) return { success: false, duesShortfall: 0, error: error.message };
+
+        // Handle returned items: create buy-back transaction for returned pieces
+        if (item.returnedUnits > 0) {
+          const returnedGrossWeight = item.originalGrossWeightPerUnit * item.returnedUnits;
+          const returnedFineGold = returnedGrossWeight * item.originalPurity / 100;
+
+          await supabase
+            .from('ghaat_transactions')
+            .insert({
+              user_id: ctx.userId,
+              user_email: ctx.userEmail,
+              type: 'buy',
+              merchant_id: item.originalMerchantId,
+              merchant_name: item.originalMerchantName,
+              category: item.originalCategory,
+              units: item.returnedUnits,
+              gross_weight_per_unit: item.originalGrossWeightPerUnit,
+              purity: item.originalPurity,
+              total_gross_weight: returnedGrossWeight,
+              fine_gold: returnedFineGold,
+              labor_type: null,
+              labor_amount: 0,
+              notes: `Returned from pending sale (group: ${params.groupId})`,
+              transaction_date: params.confirmedDate,
+              status: null,
+              group_id: null,
+            });
+        }
+      }
+
+      return { success: true, duesShortfall, error: null };
+    } catch (error) {
+      return { success: false, duesShortfall: 0, error: 'An unexpected error occurred' };
+    }
+  }
+
+  // Stock calculation: buy = +stock, sell (pending or sold) = -stock
+  // Returned items are tracked as separate type='buy' transactions
   static calculateStock(transactions: GhaatTransaction[]): GhaatStockItem[] {
     const stockMap = new Map<string, { units: number; totalGrossWeight: number; totalFineGold: number }>();
 
@@ -226,6 +450,8 @@ export class GhaatService {
         existing.totalGrossWeight += txn.totalGrossWeight;
         existing.totalFineGold += txn.fineGold;
       } else {
+        // Sell transactions (both pending and sold) reduce stock
+        // because items leave our hands when given to merchant (pending)
         existing.units -= txn.units;
         existing.totalGrossWeight -= txn.totalGrossWeight;
         existing.totalFineGold -= txn.fineGold;
@@ -242,6 +468,7 @@ export class GhaatService {
     return result.sort((a, b) => a.category.localeCompare(b.category));
   }
 
+  // P&L: only count sold (confirmed) sells, NOT pending
   static calculatePnL(transactions: GhaatTransaction[]): GhaatPnL {
     let totalBuyFineGold = 0;
     let totalSellFineGold = 0;
@@ -250,20 +477,113 @@ export class GhaatService {
 
     for (const txn of transactions) {
       if (txn.type === 'buy') {
-        totalBuyFineGold += txn.fineGold;
-        if (txn.laborType === 'gold' && txn.laborAmount) {
-          goldLaborPaid += txn.laborAmount;
-        } else if (txn.laborType === 'cash' && txn.laborAmount) {
-          cashLaborPaid += txn.laborAmount;
+        // Only count karigar buys in cost (not merchant returns)
+        if (txn.karigarId || (!txn.karigarId && !txn.merchantId)) {
+          totalBuyFineGold += txn.fineGold;
+          if (txn.laborType === 'gold' && txn.laborAmount) {
+            goldLaborPaid += txn.laborAmount;
+          } else if (txn.laborType === 'cash' && txn.laborAmount) {
+            cashLaborPaid += txn.laborAmount;
+          }
         }
       } else {
-        totalSellFineGold += txn.fineGold;
+        // Only count sold transactions in P&L (not pending)
+        if (txn.status === 'sold') {
+          totalSellFineGold += txn.confirmedFineGold || txn.fineGold;
+        } else if (!txn.status) {
+          // Legacy sell transactions without status — count as before
+          totalSellFineGold += txn.fineGold;
+        }
       }
     }
 
-    // Net gold profit = fine gold charged to customers - fine gold given to karigars - gold labor
     const netGoldProfit = totalSellFineGold - totalBuyFineGold - goldLaborPaid;
-
     return { totalBuyFineGold, totalSellFineGold, goldLaborPaid, cashLaborPaid, netGoldProfit };
+  }
+
+  // Monthly profit using both stock delta and transaction-based methods
+  static calculateMonthlyProfit(transactions: GhaatTransaction[]): GhaatMonthlyProfit[] {
+    const sorted = [...transactions].sort((a, b) => {
+      const dateA = a.transactionDate || a.createdAt.toISOString().split('T')[0];
+      const dateB = b.transactionDate || b.createdAt.toISOString().split('T')[0];
+      return dateA.localeCompare(dateB);
+    });
+
+    // Group by month
+    const monthMap = new Map<string, GhaatTransaction[]>();
+    for (const txn of sorted) {
+      const date = txn.transactionDate || txn.createdAt.toISOString().split('T')[0];
+      const month = date.substring(0, 7);
+      const arr = monthMap.get(month) || [];
+      arr.push(txn);
+      monthMap.set(month, arr);
+    }
+
+    let runningFineGold = 0;
+    const results: GhaatMonthlyProfit[] = [];
+
+    const months = Array.from(monthMap.keys()).sort();
+    for (const month of months) {
+      const txns = monthMap.get(month)!;
+      const startFineGold = runningFineGold;
+
+      let buyFineGold = 0;
+      let sellFineGold = 0;
+      let laborGold = 0;
+
+      for (const txn of txns) {
+        if (txn.type === 'buy') {
+          runningFineGold += txn.fineGold;
+          if (txn.karigarId || (!txn.karigarId && !txn.merchantId)) {
+            buyFineGold += txn.fineGold;
+            if (txn.laborType === 'gold' && txn.laborAmount) {
+              laborGold += txn.laborAmount;
+            }
+          }
+        } else if (txn.type === 'sell') {
+          runningFineGold -= txn.fineGold;
+          if (txn.status === 'sold' || !txn.status) {
+            sellFineGold += txn.confirmedFineGold || txn.fineGold;
+          }
+        }
+      }
+
+      results.push({
+        month,
+        startFineGold,
+        endFineGold: runningFineGold,
+        stockDeltaProfit: runningFineGold - startFineGold,
+        buyFineGold,
+        sellFineGold,
+        laborGold,
+        transactionProfit: sellFineGold - buyFineGold - laborGold,
+      });
+    }
+
+    return results;
+  }
+
+  // Calculate jewellery-related dues for a merchant
+  static calculateMerchantJewelleryDues(
+    merchantId: string,
+    transactions: GhaatTransaction[]
+  ): { fineGoldPending: number; cashDue: number } {
+    let cashDue = 0;
+
+    // Cash dues from confirmed sells with shortfall
+    const soldTxns = transactions.filter(
+      t => t.merchantId === merchantId && t.type === 'sell' && t.status === 'sold'
+    );
+    for (const txn of soldTxns) {
+      cashDue += txn.duesShortfall || 0;
+    }
+
+    // Fine gold pending = total fine gold in pending sells for this merchant
+    const pendingTxns = transactions.filter(
+      t => t.merchantId === merchantId && t.type === 'sell' && t.status === 'pending'
+    );
+    const fineGoldPending = pendingTxns.reduce((s, t) => s + t.fineGold, 0);
+
+    return { fineGoldPending, cashDue };
   }
 }
