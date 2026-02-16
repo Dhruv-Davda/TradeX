@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Gem, ShoppingCart, TrendingUp, Package, ChevronDown, ChevronUp, Scale, Clock } from 'lucide-react';
+import { Gem, ShoppingCart, TrendingUp, Package, ChevronDown, ChevronUp, Scale, Clock, Coins } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
@@ -9,6 +9,7 @@ import { EmptyState } from '../ui/EmptyState';
 import { PageSkeleton } from '../ui/Skeleton';
 import { GhaatTransaction } from '../../types';
 import { GhaatService, GhaatStockItem, GhaatPnL } from '../../services/ghaatService';
+import { RawGoldLedgerService } from '../../services/rawGoldLedgerService';
 import { JewelleryCategoryService } from '../../services/jewelleryCategoryService';
 import { DEFAULT_JEWELLERY_CATEGORIES, WEIGHT_BRACKETS, JEWELLERY_CATEGORY_COLORS } from '../../lib/constants';
 
@@ -18,16 +19,19 @@ export const Ghaat: React.FC = () => {
   const [customCategories, setCustomCategories] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+  const [rawGoldBalance, setRawGoldBalance] = useState(0);
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [txnResult, catResult] = await Promise.all([
+        const [txnResult, catResult, balanceResult] = await Promise.all([
           GhaatService.getTransactions(),
           JewelleryCategoryService.getCategories(),
+          RawGoldLedgerService.getBalance(),
         ]);
         if (!txnResult.error) setTransactions(txnResult.transactions);
         if (!catResult.error) setCustomCategories(catResult.categories.map(c => c.name));
+        if (!balanceResult.error) setRawGoldBalance(balanceResult.balance);
       } catch (error) {
         console.error('Error loading ghaat data:', error);
       } finally {
@@ -116,7 +120,7 @@ export const Ghaat: React.FC = () => {
       </motion.div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
           label="Total Units in Stock"
           value={`${totalUnits} pcs`}
@@ -150,6 +154,16 @@ export const Ghaat: React.FC = () => {
             </span>
           }
         />
+        <div className="cursor-pointer" onClick={() => navigate('/raw-gold')}>
+          <StatCard
+            label="Raw Gold Balance"
+            value={`${rawGoldBalance.toFixed(3)} gm`}
+            icon={Coins}
+            variant={rawGoldBalance >= 0 ? 'gold' : 'danger'}
+            animationDelay={0.2}
+            subtitle={<span className="text-[11px] text-gray-500">Tap to view ledger</span>}
+          />
+        </div>
       </div>
 
       {/* Pending with Merchants */}

@@ -6,6 +6,7 @@ import { Select } from './Select';
 import { Button } from './Button';
 import { GhaatTransaction } from '../../types';
 import { GhaatService } from '../../services/ghaatService';
+import { RawGoldLedgerService } from '../../services/rawGoldLedgerService';
 import { DEFAULT_JEWELLERY_CATEGORIES, GHAAT_STATUS_COLORS } from '../../lib/constants';
 import { formatCurrency } from '../../utils/calculations';
 
@@ -19,6 +20,9 @@ interface EditGhaatFormData {
   amountReceived: number;
   date: string;
   notes: string;
+  goldGivenWeight: number;
+  goldGivenPurity: number;
+  cashPaid: number;
 }
 
 interface GhaatEditModalProps {
@@ -53,6 +57,9 @@ export const GhaatEditModal: React.FC<GhaatEditModalProps> = ({
       setValue('laborAmount', transaction.laborAmount || 0);
       setValue('amountReceived', transaction.amountReceived || 0);
       setValue('notes', transaction.notes || '');
+      setValue('goldGivenWeight', transaction.goldGivenWeight || 0);
+      setValue('goldGivenPurity', transaction.goldGivenPurity || 0);
+      setValue('cashPaid', transaction.cashPaid || 0);
 
       const txnDate = transaction.transactionDate
         ? new Date(transaction.transactionDate).toISOString().split('T')[0]
@@ -70,6 +77,9 @@ export const GhaatEditModal: React.FC<GhaatEditModalProps> = ({
   const purity = Number(watchedValues.purity) || 0;
   const totalGrossWeight = units * weightPerUnit;
   const fineGold = totalGrossWeight * purity / 100;
+  const editGoldGivenWeight = Number(watchedValues.goldGivenWeight) || 0;
+  const editGoldGivenPurity = Number(watchedValues.goldGivenPurity) || 0;
+  const editGoldGivenFine = editGoldGivenWeight * editGoldGivenPurity / 100;
 
   const handleUpdate = async (data: EditGhaatFormData) => {
     if (!transaction) return;
@@ -77,6 +87,11 @@ export const GhaatEditModal: React.FC<GhaatEditModalProps> = ({
     try {
       const totalGW = Number(data.units) * Number(data.grossWeightPerUnit);
       const fg = totalGW * Number(data.purity) / 100;
+
+      const goldGW = Number(data.goldGivenWeight) || 0;
+      const goldGP = Number(data.goldGivenPurity) || 0;
+      const goldGF = goldGW * goldGP / 100;
+      const cp = Number(data.cashPaid) || 0;
 
       const { transaction: updated, error } = await GhaatService.updateTransaction(transaction.id, {
         category: data.category,
@@ -90,7 +105,28 @@ export const GhaatEditModal: React.FC<GhaatEditModalProps> = ({
         amountReceived: transaction.type === 'sell' ? Number(data.amountReceived) || 0 : undefined,
         notes: data.notes || undefined,
         transactionDate: data.date,
+        goldGivenWeight: transaction.type === 'buy' ? (goldGW || undefined) : undefined,
+        goldGivenPurity: transaction.type === 'buy' ? (goldGP || undefined) : undefined,
+        goldGivenFine: transaction.type === 'buy' ? (goldGF || undefined) : undefined,
+        cashPaid: transaction.type === 'buy' ? (cp || undefined) : undefined,
       });
+
+      // Sync raw gold ledger for buy transactions
+      if (transaction.type === 'buy' && !error) {
+        if (goldGF > 0) {
+          // Update or create ledger entry
+          await RawGoldLedgerService.updateByReferenceId(transaction.id, {
+            grossWeight: goldGW,
+            purity: goldGP,
+            fineGold: goldGF,
+            cashAmount: cp || undefined,
+            transactionDate: data.date,
+          });
+        } else {
+          // Remove ledger entry if gold given was cleared
+          await RawGoldLedgerService.deleteByReferenceId(transaction.id);
+        }
+      }
 
       if (error) {
         alert('Error updating transaction: ' + error);
@@ -282,6 +318,50 @@ export const GhaatEditModal: React.FC<GhaatEditModalProps> = ({
             />
           </div>
         </div>
+
+        {/* Payment to Karigar (buy transactions only) */}
+        {transaction?.type === 'buy' && (
+          <div className="border border-white/10 rounded-lg p-4 space-y-3">
+            <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Payment to Karigar</h4>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Gold Given (gm)</label>
+                <Input
+                  {...register('goldGivenWeight')}
+                  type="number"
+                  step="0.001"
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Gold Purity (%)</label>
+                <Input
+                  {...register('goldGivenPurity')}
+                  type="number"
+                  step="0.01"
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Cash Paid (₹)</label>
+                <Input
+                  {...register('cashPaid')}
+                  type="number"
+                  step="1"
+                  className="w-full"
+                />
+              </div>
+            </div>
+            {editGoldGivenFine > 0 && (
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-2">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-amber-400">Fine Gold Given:</span>
+                  <span className="text-amber-300 font-bold">{editGoldGivenFine.toFixed(3)} gm</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Amount Received (legacy sell only — no status) */}
         {transaction?.type === 'sell' && !transaction.status && (

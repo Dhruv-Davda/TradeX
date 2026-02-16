@@ -23,6 +23,11 @@ export interface DatabaseGhaatTransaction {
   transaction_date: string | null;
   created_at: string;
   updated_at: string;
+  // Payment to karigar columns (buy transactions)
+  gold_given_weight: number | null;
+  gold_given_purity: number | null;
+  gold_given_fine: number | null;
+  cash_paid: number | null;
   // Pending/Sold status flow columns
   status: string | null;
   group_id: string | null;
@@ -90,6 +95,11 @@ export class GhaatService {
       transactionDate: db.transaction_date || undefined,
       createdAt: new Date(db.created_at),
       updatedAt: new Date(db.updated_at),
+      // Payment to karigar fields
+      goldGivenWeight: db.gold_given_weight ? Number(db.gold_given_weight) : undefined,
+      goldGivenPurity: db.gold_given_purity ? Number(db.gold_given_purity) : undefined,
+      goldGivenFine: db.gold_given_fine ? Number(db.gold_given_fine) : undefined,
+      cashPaid: db.cash_paid ? Number(db.cash_paid) : undefined,
       // Pending/Sold fields
       status: (db.status as 'pending' | 'sold') || undefined,
       groupId: db.group_id || undefined,
@@ -128,6 +138,11 @@ export class GhaatService {
       amount_received: txn.amountReceived ?? null,
       notes: txn.notes || null,
       transaction_date: txn.transactionDate || null,
+      // Payment to karigar fields
+      gold_given_weight: txn.goldGivenWeight ?? null,
+      gold_given_purity: txn.goldGivenPurity ?? null,
+      gold_given_fine: txn.goldGivenFine ?? null,
+      cash_paid: txn.cashPaid ?? null,
       // Pending/Sold fields
       status: txn.status || null,
       group_id: txn.groupId || null,
@@ -229,6 +244,11 @@ export class GhaatService {
       if (updates.amountReceived !== undefined) dbUpdates.amount_received = updates.amountReceived;
       if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
       if (updates.transactionDate !== undefined) dbUpdates.transaction_date = updates.transactionDate;
+      // Payment to karigar fields
+      if (updates.goldGivenWeight !== undefined) dbUpdates.gold_given_weight = updates.goldGivenWeight;
+      if (updates.goldGivenPurity !== undefined) dbUpdates.gold_given_purity = updates.goldGivenPurity;
+      if (updates.goldGivenFine !== undefined) dbUpdates.gold_given_fine = updates.goldGivenFine;
+      if (updates.cashPaid !== undefined) dbUpdates.cash_paid = updates.cashPaid;
       // Pending/Sold fields
       if (updates.status !== undefined) dbUpdates.status = updates.status;
       if (updates.groupId !== undefined) dbUpdates.group_id = updates.groupId;
@@ -269,6 +289,13 @@ export class GhaatService {
     try {
       const ctx = await this.getUserContext();
       if (!ctx) return { success: false, error: 'User not authenticated' };
+
+      // Delete any linked raw gold ledger entries
+      await supabase
+        .from('raw_gold_ledger')
+        .delete()
+        .eq('reference_id', id)
+        .eq('user_email', ctx.userEmail);
 
       const { error } = await supabase
         .from('ghaat_transactions')
@@ -429,6 +456,27 @@ export class GhaatService {
               group_id: null,
             });
         }
+      }
+
+      // Create raw gold ledger entry for gold received from merchant
+      if (goldReturnedFine > 0) {
+        const firstItem = params.confirmedItems[0];
+        await supabase
+          .from('raw_gold_ledger')
+          .insert({
+            user_id: ctx.userId,
+            user_email: ctx.userEmail,
+            type: 'in',
+            source: 'merchant_return',
+            reference_id: params.groupId,
+            gross_weight: params.goldReturnedWeight,
+            purity: params.goldReturnedPurity,
+            fine_gold: goldReturnedFine,
+            counterparty_name: firstItem?.originalMerchantName || '',
+            counterparty_id: firstItem?.originalMerchantId || '',
+            notes: `Gold returned from merchant sale (group: ${params.groupId})`,
+            transaction_date: params.confirmedDate,
+          });
       }
 
       return { success: true, duesShortfall, error: null };

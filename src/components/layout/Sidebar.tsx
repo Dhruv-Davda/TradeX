@@ -54,6 +54,7 @@ const navigationSections: NavSection[] = [
       { name: 'Ghaat Buy', href: '/ghaat-buy', icon: ShoppingBag },
       { name: 'Ghaat Sell', href: '/ghaat-sell', icon: Tag },
       { name: 'Karigars', href: '/karigars', icon: Hammer },
+      { name: 'Raw Gold', href: '/raw-gold', icon: Coins },
     ],
   },
   {

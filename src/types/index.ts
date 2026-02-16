@@ -120,6 +120,11 @@ export interface GhaatTransaction {
   transactionDate?: string;
   createdAt: Date;
   updatedAt: Date;
+  // Payment to karigar fields (buy transactions only)
+  goldGivenWeight?: number;
+  goldGivenPurity?: number;
+  goldGivenFine?: number;
+  cashPaid?: number;
   // Pending/Sold status flow fields
   status?: GhaatSellStatus;
   groupId?: string;
@@ -146,6 +151,27 @@ export interface PendingGhaatSaleGroup {
   totalUnits: number;
   totalGrossWeight: number;
   totalFineGold: number;
+}
+
+// Raw Gold Ledger types
+export type RawGoldLedgerType = 'in' | 'out';
+export type RawGoldLedgerSource = 'merchant_return' | 'karigar_payment' | 'manual_adjustment' | 'initial_balance';
+
+export interface RawGoldLedgerEntry {
+  id: string;
+  type: RawGoldLedgerType;
+  source: RawGoldLedgerSource;
+  referenceId?: string;
+  grossWeight: number;
+  purity: number;
+  fineGold: number;
+  cashAmount?: number;
+  counterpartyName: string;
+  counterpartyId?: string;
+  notes?: string;
+  transactionDate: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface JewelleryCategory {

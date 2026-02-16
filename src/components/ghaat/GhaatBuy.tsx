@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useForm } from 'react-hook-form';
-import { ShoppingCart, Plus, Trash2, Eye } from 'lucide-react';
+import { ShoppingCart, Plus, Trash2, Eye, ChevronDown, ChevronUp } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -11,6 +11,7 @@ import { PageSkeleton } from '../ui/Skeleton';
 import { Karigar } from '../../types';
 import { generateId } from '../../utils/calculations';
 import { GhaatService } from '../../services/ghaatService';
+import { RawGoldLedgerService } from '../../services/rawGoldLedgerService';
 import { KarigarsService } from '../../services/karigarsService';
 import { JewelleryCategoryService } from '../../services/jewelleryCategoryService';
 import { DEFAULT_JEWELLERY_CATEGORIES } from '../../lib/constants';
@@ -25,6 +26,9 @@ interface GhaatBuyFormData {
   laborAmount: number;
   transactionDate: string;
   notes?: string;
+  goldGivenWeight?: number;
+  goldGivenPurity?: number;
+  cashPaid?: number;
 }
 
 interface PendingGhaatBuy {
@@ -38,6 +42,10 @@ interface PendingGhaatBuy {
   laborType: string;
   laborAmount: number;
   notes?: string;
+  goldGivenWeight?: number;
+  goldGivenPurity?: number;
+  goldGivenFine?: number;
+  cashPaid?: number;
 }
 
 export const GhaatBuy: React.FC = () => {
@@ -51,6 +59,7 @@ export const GhaatBuy: React.FC = () => {
   const [pendingTrades, setPendingTrades] = useState<PendingGhaatBuy[]>([]);
   const [showPreview, setShowPreview] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPayment, setShowPayment] = useState(false);
 
   const { register, handleSubmit, watch, reset, setValue, formState: { errors } } = useForm<GhaatBuyFormData>({
     defaultValues: {
@@ -87,6 +96,10 @@ export const GhaatBuy: React.FC = () => {
   const purity = Number(watchedValues.purity) || 0;
   const totalGrossWeight = units * weightPerUnit;
   const fineGold = totalGrossWeight * purity / 100;
+  const goldGivenWeight = Number(watchedValues.goldGivenWeight) || 0;
+  const goldGivenPurity = Number(watchedValues.goldGivenPurity) || 0;
+  const goldGivenFine = goldGivenWeight * goldGivenPurity / 100;
+  const cashPaid = Number(watchedValues.cashPaid) || 0;
 
   const allCategories = [...new Set([...DEFAULT_JEWELLERY_CATEGORIES, ...customCategories])];
   const categoryOptions = [
@@ -109,7 +122,7 @@ export const GhaatBuy: React.FC = () => {
     if (!selectedKarigar) return;
 
     try {
-      const { error } = await GhaatService.addTransaction({
+      const { transaction, error } = await GhaatService.addTransaction({
         type: 'buy',
         karigarId: data.karigarId,
         karigarName: selectedKarigar.name,
@@ -123,6 +136,10 @@ export const GhaatBuy: React.FC = () => {
         laborAmount: Number(data.laborAmount) || 0,
         transactionDate: data.transactionDate,
         notes: data.notes,
+        goldGivenWeight: goldGivenWeight || undefined,
+        goldGivenPurity: goldGivenPurity || undefined,
+        goldGivenFine: goldGivenFine || undefined,
+        cashPaid: cashPaid || undefined,
       });
 
       if (error) {
@@ -130,7 +147,25 @@ export const GhaatBuy: React.FC = () => {
         return;
       }
 
+      // Create raw gold ledger entry if gold was given to karigar
+      if (goldGivenFine > 0 && transaction) {
+        await RawGoldLedgerService.addEntry({
+          type: 'out',
+          source: 'karigar_payment',
+          referenceId: transaction.id,
+          grossWeight: goldGivenWeight,
+          purity: goldGivenPurity,
+          fineGold: goldGivenFine,
+          cashAmount: cashPaid || undefined,
+          counterpartyName: selectedKarigar.name,
+          counterpartyId: data.karigarId,
+          transactionDate: data.transactionDate,
+          notes: `Gold given to ${selectedKarigar.name} for purchase`,
+        });
+      }
+
       reset({ purity: 92, laborType: 'cash', units: 1, transactionDate: new Date().toISOString().split('T')[0] });
+      setShowPayment(false);
       alert('Jewellery purchase recorded successfully!');
     } catch (error) {
       alert('Unexpected error saving transaction');
@@ -149,6 +184,10 @@ export const GhaatBuy: React.FC = () => {
       laborType: data.laborType,
       laborAmount: Number(data.laborAmount) || 0,
       notes: data.notes,
+      goldGivenWeight: goldGivenWeight || undefined,
+      goldGivenPurity: goldGivenPurity || undefined,
+      goldGivenFine: goldGivenFine || undefined,
+      cashPaid: cashPaid || undefined,
     };
 
     setPendingTrades([...pendingTrades, pending]);
@@ -160,6 +199,7 @@ export const GhaatBuy: React.FC = () => {
     setValue('purity', 92);
     setValue('laborType', 'cash');
     setValue('units', 1);
+    setShowPayment(false);
   };
 
   const handleSubmitAll = async () => {
@@ -187,11 +227,15 @@ export const GhaatBuy: React.FC = () => {
           laborType: watchedValues.laborType,
           laborAmount: Number(watchedValues.laborAmount) || 0,
           notes: watchedValues.notes,
+          goldGivenWeight: goldGivenWeight || undefined,
+          goldGivenPurity: goldGivenPurity || undefined,
+          goldGivenFine: goldGivenFine || undefined,
+          cashPaid: cashPaid || undefined,
         });
       }
 
       for (const item of allItems) {
-        const { error } = await GhaatService.addTransaction({
+        const { transaction, error } = await GhaatService.addTransaction({
           type: 'buy',
           karigarId: watchedValues.karigarId,
           karigarName: selectedKarigar.name,
@@ -205,8 +249,30 @@ export const GhaatBuy: React.FC = () => {
           laborAmount: item.laborAmount,
           transactionDate: watchedValues.transactionDate,
           notes: item.notes,
+          goldGivenWeight: item.goldGivenWeight,
+          goldGivenPurity: item.goldGivenPurity,
+          goldGivenFine: item.goldGivenFine,
+          cashPaid: item.cashPaid,
         });
-        if (!error) successCount++;
+        if (!error) {
+          successCount++;
+          // Create raw gold ledger entry if gold was given
+          if (item.goldGivenFine && item.goldGivenFine > 0 && transaction) {
+            await RawGoldLedgerService.addEntry({
+              type: 'out',
+              source: 'karigar_payment',
+              referenceId: transaction.id,
+              grossWeight: item.goldGivenWeight || 0,
+              purity: item.goldGivenPurity || 0,
+              fineGold: item.goldGivenFine,
+              cashAmount: item.cashPaid || undefined,
+              counterpartyName: selectedKarigar.name,
+              counterpartyId: watchedValues.karigarId,
+              transactionDate: watchedValues.transactionDate,
+              notes: `Gold given to ${selectedKarigar.name} for purchase`,
+            });
+          }
+        }
       }
 
       if (successCount === allItems.length) {
@@ -214,6 +280,7 @@ export const GhaatBuy: React.FC = () => {
         setPendingTrades([]);
         reset({ purity: 92, laborType: 'cash', units: 1, transactionDate: new Date().toISOString().split('T')[0] });
         setShowPreview(false);
+        setShowPayment(false);
       } else {
         alert(`Added ${successCount} out of ${allItems.length} transactions.`);
       }
@@ -384,6 +451,56 @@ export const GhaatBuy: React.FC = () => {
             />
           </div>
 
+          {/* Payment to Karigar (Collapsible) */}
+          <div className="border border-white/10 rounded-lg overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowPayment(!showPayment)}
+              className="w-full px-4 py-3 flex items-center justify-between bg-white/5 hover:bg-white/10 transition-colors"
+            >
+              <span className="text-sm font-medium text-gray-300">Payment to Karigar (Optional)</span>
+              {showPayment ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+            </button>
+            {showPayment && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 space-y-4 border-t border-white/10">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Input
+                    label="Gold Given (gm)"
+                    type="number"
+                    step="0.001"
+                    placeholder="0.000"
+                    whiteBorder
+                    {...register('goldGivenWeight', { min: { value: 0, message: 'Cannot be negative' } })}
+                  />
+                  <Input
+                    label="Gold Purity (%)"
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    whiteBorder
+                    {...register('goldGivenPurity', { min: { value: 0, message: 'Min 0%' }, max: { value: 100, message: 'Max 100%' } })}
+                  />
+                </div>
+                {goldGivenFine > 0 && (
+                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-amber-400">Fine Gold Given:</span>
+                      <span className="text-amber-300 font-bold">{goldGivenFine.toFixed(3)} gm</span>
+                    </div>
+                  </div>
+                )}
+                <Input
+                  label="Cash Paid (₹)"
+                  type="number"
+                  step="1"
+                  placeholder="0"
+                  whiteBorder
+                  {...register('cashPaid', { min: { value: 0, message: 'Cannot be negative' } })}
+                />
+              </motion.div>
+            )}
+          </div>
+
           <Input label="Notes (Optional)" placeholder="Add any notes" whiteBorder {...register('notes')} />
 
           {/* Action buttons */}
@@ -438,6 +555,16 @@ export const GhaatBuy: React.FC = () => {
                       <span className="text-xs text-gray-400">Labor: {trade.laborAmount} {trade.laborType === 'gold' ? 'gm' : '₹'}</span>
                     )}
                   </div>
+                  {(trade.goldGivenFine || trade.cashPaid) && (
+                    <div className="flex items-center space-x-4 mt-1">
+                      {trade.goldGivenFine ? (
+                        <span className="text-xs text-amber-400">Gold Given: {trade.goldGivenFine.toFixed(3)} gm</span>
+                      ) : null}
+                      {trade.cashPaid ? (
+                        <span className="text-xs text-green-400">Cash: ₹{trade.cashPaid.toLocaleString('en-IN')}</span>
+                      ) : null}
+                    </div>
+                  )}
                 </div>
                 <Button variant="ghost" size="sm" onClick={() => setPendingTrades(pendingTrades.filter(t => t.id !== trade.id))}
                   className="text-red-400 hover:text-red-300 hover:bg-red-400/10">

@@ -21,6 +21,7 @@ import { Ghaat } from './components/ghaat/Ghaat';
 import { GhaatBuy } from './components/ghaat/GhaatBuy';
 import { GhaatSell } from './components/ghaat/GhaatSell';
 import { Karigars } from './components/karigars/Karigars';
+import { RawGoldLedger } from './components/ghaat/RawGoldLedger';
 import { AuthCallback } from './pages/AuthCallback';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -75,6 +76,7 @@ const AppContent: React.FC = () => {
           <Route path="ghaat-buy" element={<GhaatBuy />} />
           <Route path="ghaat-sell" element={<GhaatSell />} />
           <Route path="karigars" element={<Karigars />} />
+          <Route path="raw-gold" element={<RawGoldLedger />} />
           <Route path="migration" element={<DataMigration />} />
           <Route path="settings/user" element={<UserSettings />} />
           <Route path="settings/account" element={<AccountSettings />} />

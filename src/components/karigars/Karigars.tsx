@@ -66,35 +66,42 @@ export const Karigars: React.FC = () => {
   // Get stats for a karigar
   const getKarigarStats = (karigarId: string) => {
     const txns = transactions.filter(t => t.karigarId === karigarId);
-    let totalGoldGiven = 0;
+    let jewelleryReceivedFineGold = 0;
+    let goldGivenToKarigar = 0;
+    let totalCashPaid = 0;
     let totalPiecesReceived = 0;
     let cashLaborPaid = 0;
     let goldLaborPaid = 0;
 
     for (const t of txns) {
       if (t.type === 'buy') {
-        totalGoldGiven += t.fineGold;
+        jewelleryReceivedFineGold += t.fineGold;
         totalPiecesReceived += t.units;
+        if (t.goldGivenFine) goldGivenToKarigar += t.goldGivenFine;
+        if (t.cashPaid) totalCashPaid += t.cashPaid;
         if (t.laborType === 'cash' && t.laborAmount) cashLaborPaid += t.laborAmount;
         if (t.laborType === 'gold' && t.laborAmount) goldLaborPaid += t.laborAmount;
       }
     }
 
-    return { totalGoldGiven, totalPiecesReceived, cashLaborPaid, goldLaborPaid, txnCount: txns.length };
+    const netBalance = jewelleryReceivedFineGold - goldGivenToKarigar;
+    return { jewelleryReceivedFineGold, goldGivenToKarigar, totalCashPaid, totalPiecesReceived, cashLaborPaid, goldLaborPaid, netBalance, txnCount: txns.length };
   };
 
   // Total stats
   const totalStats = useMemo(() => {
-    let goldGiven = 0, piecesReceived = 0, cashLabor = 0, goldLabor = 0;
+    let jwlryReceived = 0, goldGiven = 0, cashPaid = 0, piecesReceived = 0, cashLabor = 0, goldLabor = 0;
     for (const t of transactions) {
       if (t.type === 'buy') {
-        goldGiven += t.fineGold;
+        jwlryReceived += t.fineGold;
         piecesReceived += t.units;
+        if (t.goldGivenFine) goldGiven += t.goldGivenFine;
+        if (t.cashPaid) cashPaid += t.cashPaid;
         if (t.laborType === 'cash' && t.laborAmount) cashLabor += t.laborAmount;
         if (t.laborType === 'gold' && t.laborAmount) goldLabor += t.laborAmount;
       }
     }
-    return { goldGiven, piecesReceived, cashLabor, goldLabor };
+    return { jwlryReceived, goldGiven, cashPaid, piecesReceived, cashLabor, goldLabor };
   }, [transactions]);
 
   // Filtered history for selected karigar
@@ -183,22 +190,32 @@ export const Karigars: React.FC = () => {
         </motion.div>
 
         {/* Summary cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           <div className="bg-white/5 rounded-lg p-3">
-            <p className="text-xs text-gray-400">Gold Given</p>
-            <p className="text-lg font-bold text-yellow-400">{stats.totalGoldGiven.toFixed(3)} gm</p>
+            <p className="text-xs text-gray-400">Jwlry Received</p>
+            <p className="text-lg font-bold text-yellow-400">{stats.jewelleryReceivedFineGold.toFixed(3)} gm</p>
           </div>
           <div className="bg-white/5 rounded-lg p-3">
-            <p className="text-xs text-gray-400">Pieces Received</p>
+            <p className="text-xs text-gray-400">Gold Given</p>
+            <p className="text-lg font-bold text-amber-400">{stats.goldGivenToKarigar.toFixed(3)} gm</p>
+          </div>
+          <div className="bg-white/5 rounded-lg p-3">
+            <p className="text-xs text-gray-400">Cash Paid</p>
+            <p className="text-lg font-bold text-green-400">₹{stats.totalCashPaid.toLocaleString('en-IN')}</p>
+          </div>
+          <div className="bg-white/5 rounded-lg p-3">
+            <p className="text-xs text-gray-400">Pieces</p>
             <p className="text-lg font-bold text-white">{stats.totalPiecesReceived}</p>
           </div>
           <div className="bg-white/5 rounded-lg p-3">
             <p className="text-xs text-gray-400">Cash Labor</p>
-            <p className="text-lg font-bold text-green-400">₹{stats.cashLaborPaid.toLocaleString('en-IN')}</p>
+            <p className="text-lg font-bold text-gray-300">₹{stats.cashLaborPaid.toLocaleString('en-IN')}</p>
           </div>
           <div className="bg-white/5 rounded-lg p-3">
-            <p className="text-xs text-gray-400">Gold Labor</p>
-            <p className="text-lg font-bold text-yellow-400">{stats.goldLaborPaid.toFixed(3)} gm</p>
+            <p className="text-xs text-gray-400">Net Balance</p>
+            <p className={`text-lg font-bold ${stats.netBalance >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {stats.netBalance >= 0 ? '+' : ''}{stats.netBalance.toFixed(3)} gm
+            </p>
           </div>
         </div>
 
@@ -230,12 +247,14 @@ export const Karigars: React.FC = () => {
                   <th className="text-right p-3 text-gray-400 font-medium">Purity</th>
                   <th className="text-right p-3 text-gray-400 font-medium">Fine Gold</th>
                   <th className="text-left p-3 text-gray-400 font-medium">Labor</th>
+                  <th className="text-right p-3 text-gray-400 font-medium">Gold Given</th>
+                  <th className="text-right p-3 text-gray-400 font-medium">Cash Paid</th>
                   <th className="text-center p-3 text-gray-400 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {karigarHistory.length === 0 ? (
-                  <tr><td colSpan={8} className="text-center p-8 text-gray-500">No transactions found</td></tr>
+                  <tr><td colSpan={10} className="text-center p-8 text-gray-500">No transactions found</td></tr>
                 ) : (
                   karigarHistory.map(txn => (
                     <tr key={txn.id} className="border-b border-white/5 hover:bg-white/5">
@@ -249,6 +268,12 @@ export const Karigars: React.FC = () => {
                       <td className="p-3 text-right text-yellow-400 font-medium">{txn.fineGold.toFixed(3)} gm</td>
                       <td className="p-3 text-gray-300">
                         {txn.laborAmount ? `${txn.laborAmount} ${txn.laborType === 'gold' ? 'gm' : '₹'}` : '—'}
+                      </td>
+                      <td className="p-3 text-right text-amber-400">
+                        {txn.goldGivenFine ? `${txn.goldGivenFine.toFixed(3)} gm` : '—'}
+                      </td>
+                      <td className="p-3 text-right text-green-400">
+                        {txn.cashPaid ? `₹${txn.cashPaid.toLocaleString('en-IN')}` : '—'}
                       </td>
                       <td className="p-3 text-center">
                         <Button variant="ghost" size="sm" onClick={() => { setEditingTxn(txn); setShowTxnEditModal(true); }}>
@@ -304,11 +329,13 @@ export const Karigars: React.FC = () => {
       </motion.div>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         <StatCard label="Total Karigars" value={String(karigars.length)} icon={Hammer} variant="warning" animationDelay={0} />
-        <StatCard label="Gold Given" value={`${totalStats.goldGiven.toFixed(3)} gm`} icon={Hammer} variant="gold" animationDelay={0.05} />
-        <StatCard label="Pieces Received" value={String(totalStats.piecesReceived)} icon={Hammer} variant="info" animationDelay={0.1} />
-        <StatCard label="Gold Labor" value={`${totalStats.goldLabor.toFixed(3)} gm`} icon={Hammer} variant="purple" animationDelay={0.15} />
+        <StatCard label="Jwlry Received" value={`${totalStats.jwlryReceived.toFixed(3)} gm`} icon={Hammer} variant="gold" animationDelay={0.05} />
+        <StatCard label="Gold Given" value={`${totalStats.goldGiven.toFixed(3)} gm`} icon={Hammer} variant="warning" animationDelay={0.1} />
+        <StatCard label="Cash Paid" value={`₹${totalStats.cashPaid.toLocaleString('en-IN')}`} icon={Hammer} variant="success" animationDelay={0.15} />
+        <StatCard label="Pieces" value={String(totalStats.piecesReceived)} icon={Hammer} variant="info" animationDelay={0.2} />
+        <StatCard label="Cash Labor" value={`₹${totalStats.cashLabor.toLocaleString('en-IN')}`} icon={Hammer} variant="purple" animationDelay={0.25} />
       </div>
 
       {/* Search */}
@@ -380,20 +407,22 @@ export const Karigars: React.FC = () => {
                   {/* Stats */}
                   <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-white/10">
                     <div>
+                      <p className="text-xs text-gray-500">Jwlry Received</p>
+                      <p className="text-sm font-semibold text-yellow-400">{stats.jewelleryReceivedFineGold.toFixed(3)} gm</p>
+                    </div>
+                    <div>
                       <p className="text-xs text-gray-500">Gold Given</p>
-                      <p className="text-sm font-semibold text-yellow-400">{stats.totalGoldGiven.toFixed(3)} gm</p>
+                      <p className="text-sm font-semibold text-amber-400">{stats.goldGivenToKarigar.toFixed(3)} gm</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500">Pieces</p>
-                      <p className="text-sm font-semibold text-white">{stats.totalPiecesReceived}</p>
+                      <p className="text-xs text-gray-500">Cash Paid</p>
+                      <p className="text-sm font-semibold text-green-400">₹{stats.totalCashPaid.toLocaleString('en-IN')}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500">Cash Labor</p>
-                      <p className="text-sm font-semibold text-green-400">₹{stats.cashLaborPaid.toLocaleString('en-IN')}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Gold Labor</p>
-                      <p className="text-sm font-semibold text-yellow-400">{stats.goldLaborPaid.toFixed(3)} gm</p>
+                      <p className="text-xs text-gray-500">Net Balance</p>
+                      <p className={`text-sm font-semibold ${stats.netBalance >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {stats.netBalance >= 0 ? '+' : ''}{stats.netBalance.toFixed(3)} gm
+                      </p>
                     </div>
                   </div>
 
