@@ -1,35 +1,41 @@
 import React, { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { BarChart3, TrendingUp, TrendingDown, DollarSign, Calendar } from 'lucide-react';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+import { BarChart3, TrendingUp, TrendingDown, DollarSign, Calendar, Gem } from 'lucide-react';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
   ResponsiveContainer,
   PieChart,
   Pie,
   Cell,
   LineChart,
-  Line
+  Line,
+  Legend,
 } from 'recharts';
 import { Card } from '../ui/Card';
-import { Trade, Expense, Income } from '../../types';
+import { StatCard } from '../ui/StatCard';
+import { PageSkeleton } from '../ui/Skeleton';
+import { Trade, Expense, Income, GhaatTransaction } from '../../types';
 import { TradeService } from '../../services/tradeService';
 import { IncomeService } from '../../services/incomeService';
 import { ExpensesService } from '../../services/expensesService';
 import { StockService } from '../../services/stockService';
 import { ManualNetProfitService } from '../../services/manualNetProfitService';
-import { formatCurrency, formatCurrencyInCR } from '../../utils/calculations';
+import { GhaatService, GhaatMonthlyProfit } from '../../services/ghaatService';
+import { formatCurrency, formatCurrencyCompact, formatCurrencyInCR } from '../../utils/calculations';
 import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths, isWithinInterval } from 'date-fns';
 import { MonthYearPicker } from '../ui/MonthYearPicker';
+import { TRADE_TYPE_COLORS, METAL_TYPE_COLORS, DARK_TOOLTIP_STYLE, JEWELLERY_CATEGORY_COLORS } from '../../lib/constants';
 
 export const Analytics: React.FC = () => {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [income, setIncome] = useState<Income[]>([]);
+  const [ghaatTransactions, setGhaatTransactions] = useState<GhaatTransaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [stockSnapshots, setStockSnapshots] = useState<{
     endMonth: { goldGrams: number; silverGrams: number } | null;
@@ -41,36 +47,19 @@ export const Analytics: React.FC = () => {
   React.useEffect(() => {
     const loadAllData = async () => {
       try {
-        console.log('📊 Analytics: Loading all data from database...');
-        
-        // Load trades with consistent cache key
-        const { trades: dbTrades, error: tradesError } = await TradeService.getTrades();
-        if (tradesError) {
-          console.error('❌ Analytics: Error loading trades:', tradesError);
-        } else {
-          console.log('✅ Analytics: Loaded', dbTrades.length, 'trades from database');
-          setTrades(dbTrades);
-        }
+        const [tradesResult, expensesResult, incomeResult, ghaatResult] = await Promise.all([
+          TradeService.getTrades(),
+          ExpensesService.getExpenses(),
+          IncomeService.getIncome(),
+          GhaatService.getTransactions(),
+        ]);
 
-        // Load expenses
-        const { expenses: dbExpenses, error: expensesError } = await ExpensesService.getExpenses();
-        if (expensesError) {
-          console.error('❌ Analytics: Error loading expenses:', expensesError);
-        } else {
-          console.log('✅ Analytics: Loaded', dbExpenses.length, 'expenses from database');
-          setExpenses(dbExpenses);
-        }
-
-        // Load income
-        const { income: dbIncome, error: incomeError } = await IncomeService.getIncome();
-        if (incomeError) {
-          console.error('❌ Analytics: Error loading income:', incomeError);
-        } else {
-          console.log('✅ Analytics: Loaded', dbIncome.length, 'income from database');
-          setIncome(dbIncome);
-        }
+        if (!tradesResult.error) setTrades(tradesResult.trades);
+        if (!expensesResult.error) setExpenses(expensesResult.expenses);
+        if (!incomeResult.error) setIncome(incomeResult.income);
+        if (!ghaatResult.error) setGhaatTransactions(ghaatResult.transactions);
       } catch (error) {
-        console.error('❌ Analytics: Unexpected error loading data:', error);
+        console.error('Error loading analytics data:', error);
       } finally {
         setIsLoading(false);
       }
@@ -79,7 +68,6 @@ export const Analytics: React.FC = () => {
     loadAllData();
   }, []);
 
-  // Monthly view only (clean UI)
   const today = new Date();
   const [monthRange, setMonthRange] = useState({
     startMonth: format(startOfMonth(today), 'yyyy-MM'),
@@ -92,32 +80,22 @@ export const Analytics: React.FC = () => {
       try {
         const [sy, sm] = monthRange.startMonth.split('-').map(Number);
         const [ey, em] = monthRange.endMonth.split('-').map(Number);
-        
-        // Last day of end month
+
         const endMonthLastDay = endOfMonth(new Date(ey || today.getFullYear(), (em || 1) - 1, 1));
-        
-        // Last day of previous month (startMonth - 1)
         const startMonthDate = new Date(sy || today.getFullYear(), (sm || 1) - 1, 1);
         const previousMonthLastDay = endOfMonth(subMonths(startMonthDate, 1));
 
-        // Fetch both snapshots
         const [endSnapshot, prevSnapshot] = await Promise.all([
           StockService.getStockSnapshot(endMonthLastDay),
           StockService.getStockSnapshot(previousMonthLastDay)
         ]);
 
         setStockSnapshots({
-          endMonth: {
-            goldGrams: endSnapshot.goldGrams,
-            silverGrams: endSnapshot.silverGrams
-          },
-          previousMonth: {
-            goldGrams: prevSnapshot.goldGrams,
-            silverGrams: prevSnapshot.silverGrams
-          }
+          endMonth: { goldGrams: endSnapshot.goldGrams, silverGrams: endSnapshot.silverGrams },
+          previousMonth: { goldGrams: prevSnapshot.goldGrams, silverGrams: prevSnapshot.silverGrams }
         });
       } catch (error) {
-        console.error('❌ Error loading stock snapshots:', error);
+        console.error('Error loading stock snapshots:', error);
         setStockSnapshots({ endMonth: null, previousMonth: null });
       }
     };
@@ -129,22 +107,12 @@ export const Analytics: React.FC = () => {
   React.useEffect(() => {
     const loadManualNetProfit = async () => {
       try {
-        // If startMonth and endMonth are the same, fetch single month
-        // Otherwise, sum up all months in the range
         const { netProfit, error } = await ManualNetProfitService.getNetProfitForMonthRange(
           monthRange.startMonth,
           monthRange.endMonth
         );
-
-        if (error) {
-          console.error('❌ Error loading manual net profit:', error);
-          setManualNetProfit(0);
-        } else {
-          setManualNetProfit(netProfit);
-          console.log(`📊 Manual Net Profit for ${monthRange.startMonth} to ${monthRange.endMonth}: ${netProfit}`);
-        }
+        setManualNetProfit(error ? 0 : netProfit);
       } catch (error) {
-        console.error('❌ Unexpected error loading manual net profit:', error);
         setManualNetProfit(0);
       }
     };
@@ -153,137 +121,66 @@ export const Analytics: React.FC = () => {
   }, [monthRange]);
 
   const analytics = useMemo(() => {
-    // Filter by selected month range only
-    let filteredTrades = trades;
-    let filteredExpenses = expenses;
-    let filteredIncome = income;
-
     const [sy, sm] = monthRange.startMonth.split('-').map(Number);
     const [ey, em] = monthRange.endMonth.split('-').map(Number);
-    // For trades filtering: use start of month (1st) to end of month (30th/31st)
-    // This ensures we only count trades that actually occurred in the selected month
     const startDate = startOfMonth(new Date(sy || today.getFullYear(), (sm || 1) - 1, 1));
     const endDate = endOfMonth(new Date(ey || today.getFullYear(), (em || 1) - 1, 1));
-    
-    // Ensure startDate is at midnight (00:00:00) and endDate is at end of day (23:59:59)
+
     startDate.setHours(0, 0, 0, 0);
     endDate.setHours(23, 59, 59, 999);
 
-    filteredTrades = trades.filter(trade => {
-      // Handle tradeDate - convert to Date object
+    const filteredTrades = trades.filter(trade => {
       let tradeDateObj: Date | null = null;
-      
+
       if (trade.tradeDate) {
-        // tradeDate is a string or Date object
-        tradeDateObj = typeof trade.tradeDate === 'string' 
-          ? new Date(trade.tradeDate) 
-          : (trade.tradeDate as any) instanceof Date 
+        tradeDateObj = typeof trade.tradeDate === 'string'
+          ? new Date(trade.tradeDate)
+          : (trade.tradeDate as any) instanceof Date
             ? trade.tradeDate as Date
             : new Date(trade.tradeDate as any);
       } else if (trade.createdAt) {
-        // Fallback to createdAt only if tradeDate is missing
-        tradeDateObj = trade.createdAt instanceof Date 
-          ? trade.createdAt 
+        tradeDateObj = trade.createdAt instanceof Date
+          ? trade.createdAt
           : new Date(trade.createdAt);
       }
-      
-      if (!tradeDateObj || isNaN(tradeDateObj.getTime())) {
-        return false;
-      }
-      
-      // Compare dates (year, month, day only - ignore time)
-      const tradeYear = tradeDateObj.getFullYear();
-      const tradeMonth = tradeDateObj.getMonth();
-      const tradeDay = tradeDateObj.getDate();
-      
-      const startYear = startDate.getFullYear();
-      const startMonth = startDate.getMonth();
-      const startDay = startDate.getDate();
-      
-      const endYear = endDate.getFullYear();
-      const endMonth = endDate.getMonth();
-      const endDay = endDate.getDate();
-      
-      // Create comparable date objects
-      const tradeDateOnly = new Date(tradeYear, tradeMonth, tradeDay);
-      const startDateOnly = new Date(startYear, startMonth, startDay);
-      const endDateOnly = new Date(endYear, endMonth, endDay);
-      
+
+      if (!tradeDateObj || isNaN(tradeDateObj.getTime())) return false;
+
+      const tradeDateOnly = new Date(tradeDateObj.getFullYear(), tradeDateObj.getMonth(), tradeDateObj.getDate());
+      const startDateOnly = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+      const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+
       return tradeDateOnly >= startDateOnly && tradeDateOnly <= endDateOnly;
     });
-    
-    // Additional debug: Check how many trades have tradeDate vs createdAt
-    const tradesWithTradeDate = trades.filter(t => t.tradeDate).length;
-    const tradesWithoutTradeDate = trades.filter(t => !t.tradeDate && t.createdAt).length;
-    console.log(`🔍 Total trades loaded: ${trades.length}`);
-    console.log(`🔍 Trades with tradeDate: ${tradesWithTradeDate}, without (using createdAt): ${tradesWithoutTradeDate}`);
-    
-    console.log(`📊 Analytics: Filtered ${filteredTrades.length} trades for ${monthRange.startMonth} to ${monthRange.endMonth}`);
-    console.log(`📅 Date range: ${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]}`);
-    
-    // Debug: Check date distribution
-    const dateStats = filteredTrades.reduce((acc, t) => {
-      const d = t.tradeDate || t.createdAt;
-      const month = d ? new Date(d).getMonth() + 1 : 'unknown';
-      acc[month] = (acc[month] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-    console.log('📊 Trades by month:', dateStats);
-    
-    filteredExpenses = expenses.filter(expense => isWithinInterval(expense.date, { start: startDate, end: endDate }));
-    filteredIncome = income.filter(incomeItem => isWithinInterval(incomeItem.date, { start: startDate, end: endDate }));
 
-    // Calculate basic metrics
+    const filteredExpenses = expenses.filter(expense => isWithinInterval(expense.date, { start: startDate, end: endDate }));
+    const filteredIncome = income.filter(incomeItem => isWithinInterval(incomeItem.date, { start: startDate, end: endDate }));
+
     const buyTrades = filteredTrades.filter(t => t.type === 'buy');
     const sellTrades = filteredTrades.filter(t => t.type === 'sell');
     const transferTrades = filteredTrades.filter(t => t.type === 'transfer');
-    
-    // Debug: Check null/undefined totalAmount
-    const buyNullAmount = buyTrades.filter(t => !t.totalAmount || t.totalAmount === 0).length;
-    const sellNullAmount = sellTrades.filter(t => !t.totalAmount || t.totalAmount === 0).length;
-    console.log(`⚠️ Buy trades with null/0 totalAmount: ${buyNullAmount}/${buyTrades.length}`);
-    console.log(`⚠️ Sell trades with null/0 totalAmount: ${sellNullAmount}/${sellTrades.length}`);
-    
+
     const totalPurchases = buyTrades.reduce((sum, t) => {
       const amt = Number(t.totalAmount || 0);
-      if (isNaN(amt)) {
-        console.warn('⚠️ Invalid totalAmount in buy trade:', t.id, t.totalAmount);
-        return sum;
-      }
-      return sum + amt;
+      return sum + (isNaN(amt) ? 0 : amt);
     }, 0);
     const totalSales = sellTrades.reduce((sum, t) => {
       const amt = Number(t.totalAmount || 0);
-      if (isNaN(amt)) {
-        console.warn('⚠️ Invalid totalAmount in sell trade:', t.id, t.totalAmount);
-        return sum;
-      }
-      return sum + amt;
+      return sum + (isNaN(amt) ? 0 : amt);
     }, 0);
-    
-    console.log(`💰 Total Purchases: ${totalPurchases.toLocaleString('en-IN')} (${buyTrades.length} trades)`);
-    console.log(`💰 Total Sales: ${totalSales.toLocaleString('en-IN')} (${sellTrades.length} trades)`);
     const totalTransferCharges = transferTrades.reduce((sum, t) => sum + Number(t.transferCharges || 0), 0);
-    
-    // New formulas per request
+
     const totalExpenses = filteredExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
     const totalIncome = filteredIncome.reduce((sum, i) => sum + Number(i.amount), 0);
-    // Gross Profit = total sales - total purchases + transfer income + other income - expenses
-    const grossProfit = Number(totalSales) - Number(totalPurchases) + Number(totalTransferCharges) + Number(totalIncome) - Number(totalExpenses);
+    const grossProfit = totalSales - totalPurchases + totalTransferCharges + totalIncome - totalExpenses;
+    const netProfit = grossProfit;
 
-    // Net Profit = gross profit (purely monetary)
-    const netProfit = Number(grossProfit);
-
-    // Stock deltas: Last day of end month - Last day of previous month (startMonth - 1)
     const goldDeltaGrams = stockSnapshots.endMonth && stockSnapshots.previousMonth
       ? stockSnapshots.endMonth.goldGrams - stockSnapshots.previousMonth.goldGrams
       : 0;
-    
     const silverDeltaGrams = stockSnapshots.endMonth && stockSnapshots.previousMonth
       ? stockSnapshots.endMonth.silverGrams - stockSnapshots.previousMonth.silverGrams
       : 0;
-    
-    // Convert silver to kg with 4 decimals
     const silverDeltaKg = silverDeltaGrams / 1000;
 
     // Monthly data for the last 12 months
@@ -295,31 +192,18 @@ export const Analytics: React.FC = () => {
     const monthlyData = last12Months.map(month => {
       const monthStart = startOfMonth(month);
       const monthEnd = endOfMonth(month);
-      
+
       const monthTrades = filteredTrades.filter(trade => {
-        // Use tradeDate if available, otherwise fallback to createdAt
         const tradeDate = new Date(trade.tradeDate || trade.createdAt);
         return tradeDate >= monthStart && tradeDate <= monthEnd;
       });
-      
-      const monthExpenses = filteredExpenses.filter(expense => {
-        return expense.date >= monthStart && expense.date <= monthEnd;
-      });
 
-      const monthIncome = filteredIncome.filter(incomeItem => {
-        return incomeItem.date >= monthStart && incomeItem.date <= monthEnd;
-      });
+      const monthExpenses = filteredExpenses.filter(expense => expense.date >= monthStart && expense.date <= monthEnd);
+      const monthIncome = filteredIncome.filter(incomeItem => incomeItem.date >= monthStart && incomeItem.date <= monthEnd);
 
       const sales = monthTrades.filter(t => t.type === 'sell').reduce((sum, t) => sum + Number(t.totalAmount), 0);
       const purchases = monthTrades.filter(t => t.type === 'buy').reduce((sum, t) => sum + Number(t.totalAmount), 0);
       const transferCharges = monthTrades.filter(t => t.type === 'transfer').reduce((sum, t) => sum + Number(t.transferCharges || 0), 0);
-      
-      // Calculate settlements impact for this month
-      const monthSettlementImpact = monthTrades.filter(t => t.type === 'settlement').reduce((sum, t) => {
-        const amount = Number(t.totalAmount || 0);
-        return sum + (t.settlementDirection === 'receiving' ? amount : -amount);
-      }, 0);
-      
       const expenseAmount = monthExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
       const incomeAmount = monthIncome.reduce((sum, i) => sum + Number(i.amount), 0);
 
@@ -328,36 +212,30 @@ export const Analytics: React.FC = () => {
         sales,
         purchases,
         transferCharges,
-        settlementImpact: monthSettlementImpact,
         expenses: expenseAmount,
         income: incomeAmount,
-        // Keep chart "profit" aligned to new GP formula for monthly bars
         profit: sales - purchases + transferCharges + incomeAmount - expenseAmount,
       };
     });
 
-    // Trade type distribution (using filtered data for selected month range)
+    // Trade type distribution using constants
     const tradeTypes = [
-      { name: 'Buy', value: buyTrades.length, color: '#10b981' },
-      { name: 'Sell', value: sellTrades.length, color: '#3b82f6' },
-      { name: 'Transfer', value: filteredTrades.filter(t => t.type === 'transfer').length, color: '#8b5cf6' },
-      { name: 'Settlement', value: filteredTrades.filter(t => t.type === 'settlement').length, color: '#f59e0b' },
+      { name: 'Buy', value: buyTrades.length, color: TRADE_TYPE_COLORS.buy.hex },
+      { name: 'Sell', value: sellTrades.length, color: TRADE_TYPE_COLORS.sell.hex },
+      { name: 'Transfer', value: filteredTrades.filter(t => t.type === 'transfer').length, color: TRADE_TYPE_COLORS.transfer.hex },
+      { name: 'Settlement', value: filteredTrades.filter(t => t.type === 'settlement').length, color: TRADE_TYPE_COLORS.settlement.hex },
     ];
 
-    // Metal type distribution (using filtered data for selected month range)
-    const goldTrades = filteredTrades.filter(t => t.metalType === 'gold');
-    const silverTrades = filteredTrades.filter(t => t.metalType === 'silver');
-    
+    // Metal type distribution using constants
     const metalDistribution = [
-      { name: 'Gold', value: goldTrades.length, color: '#fbbf24' },
-      { name: 'Silver', value: silverTrades.length, color: '#6b7280' },
+      { name: 'Gold', value: filteredTrades.filter(t => t.metalType === 'gold').length, color: METAL_TYPE_COLORS.gold.hex },
+      { name: 'Silver', value: filteredTrades.filter(t => t.metalType === 'silver').length, color: METAL_TYPE_COLORS.silver.hex },
     ];
 
-    // Calculate max value for chart scaling
     const maxValue = Math.max(
-      ...monthlyData.map(d => Math.max(d.sales, d.purchases, d.transferCharges, d.profit))
+      ...monthlyData.map(d => Math.max(d.sales, d.purchases, d.transferCharges, Math.abs(d.profit))),
+      1
     );
-    
 
     return {
       totalPurchases,
@@ -372,103 +250,56 @@ export const Analytics: React.FC = () => {
       metalDistribution,
       totalTrades: filteredTrades.length,
       maxValue,
-      // Expose deltas: gold in grams, silver in kg (for display)
-      goldDeltaGrams: goldDeltaGrams,
-      silverDeltaKg: silverDeltaKg,
+      goldDeltaGrams,
+      silverDeltaKg,
     };
   }, [trades, expenses, income, monthRange, stockSnapshots]);
 
-  // Build cards in requested order
-  const topCards = [
-    {
-      title: 'Total Sales',
-      value: analytics.totalSales,
-      icon: TrendingUp,
-      color: 'text-green-400',
-      bgColor: 'bg-green-400/10',
-    },
-    {
-      title: 'Total Purchases',
-      value: analytics.totalPurchases,
-      icon: TrendingDown,
-      color: 'text-red-400',
-      bgColor: 'bg-red-400/10',
-    },
-    {
-      title: 'Other Income',
-      value: analytics.totalIncome,
-      icon: TrendingUp,
-      color: 'text-emerald-400',
-      bgColor: 'bg-emerald-400/10',
-    },
-    {
-      title: 'Net Expenses',
-      value: analytics.totalExpenses,
-      icon: TrendingDown,
-      color: 'text-orange-400',
-      bgColor: 'bg-orange-400/10',
-    },
-    {
-      title: 'Gross Profit',
-      value: analytics.grossProfit,
-      icon: DollarSign,
-      color: analytics.grossProfit >= 0 ? 'text-green-400' : 'text-red-400',
-      bgColor: analytics.grossProfit >= 0 ? 'bg-green-400/10' : 'bg-red-400/10',
-    },
-  ];
+  // Ghaat P&L analytics
+  const ghaatAnalytics = useMemo(() => {
+    const pnl = GhaatService.calculatePnL(ghaatTransactions);
+    const stockItems = GhaatService.calculateStock(ghaatTransactions);
+    const totalStockFineGold = stockItems.reduce((sum, item) => sum + item.totalFineGold, 0);
+    const monthlyProfit = GhaatService.calculateMonthlyProfit(ghaatTransactions);
 
-  const bottomCards = [
-    {
-      title: 'Net Profit',
-      value: analytics.netProfit,
-      icon: BarChart3,
-      color: analytics.netProfit >= 0 ? 'text-green-400' : 'text-red-400',
-      bgColor: analytics.netProfit >= 0 ? 'bg-green-400/10' : 'bg-red-400/10',
-    },
-  ];
+    // Category distribution for pie chart
+    const categoryData = stockItems
+      .filter(item => item.totalFineGold > 0)
+      .map(item => ({
+        name: item.category,
+        value: Number(item.totalFineGold.toFixed(3)),
+        color: JEWELLERY_CATEGORY_COLORS[item.category] || '#6b7280',
+      }));
 
-  const manualCards = [
-    {
-      title: 'Final Net Profit in ₹',
-      value: manualNetProfit, // Fetched from database based on month range
-      icon: DollarSign,
-      color: 'text-primary-400',
-      bgColor: 'bg-primary-400/10',
-    }
-  ];
+    // Counts
+    const pendingCount = ghaatTransactions.filter(t => t.type === 'sell' && t.status === 'pending').length;
+    const soldCount = ghaatTransactions.filter(t => t.type === 'sell' && t.status === 'sold').length;
 
+    return { pnl, totalStockFineGold, categoryData, monthlyProfit, pendingCount, soldCount };
+  }, [ghaatTransactions]);
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-400">Loading analytics...</p>
-        </div>
-      </div>
-    );
-  }
+  if (isLoading) return <PageSkeleton cards={5} />;
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         className="flex items-center space-x-3"
       >
-        <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-blue-600 rounded-lg flex items-center justify-center">
-          <BarChart3 className="w-6 h-6 text-white" />
+        <div className="w-11 h-11 bg-gradient-to-r from-green-500 to-blue-600 rounded-xl flex items-center justify-center">
+          <BarChart3 className="w-5 h-5 text-white" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-white">Analytics</h1>
-          <p className="text-gray-400">Business insights and performance metrics</p>
+          <h1 className="text-2xl font-bold text-white font-display">Analytics</h1>
+          <p className="text-gray-400 text-sm">Business insights and performance metrics</p>
         </div>
       </motion.div>
 
       {/* Month Range Filter */}
       <Card className="p-5 bg-gradient-to-r from-gray-800/50 to-gray-900/50 border border-gray-700/50 backdrop-blur-sm">
         <div className="flex flex-col lg:flex-row items-center justify-between gap-6">
-          {/* Icon and Label Section */}
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-gradient-to-br from-primary-500/20 to-primary-600/20 rounded-lg border border-primary-500/30">
               <Calendar className="w-5 h-5 text-primary-400" />
@@ -479,7 +310,6 @@ export const Analytics: React.FC = () => {
             </div>
           </div>
 
-          {/* Month Pickers */}
           <div className="flex items-end gap-4 w-full lg:w-auto justify-center lg:justify-end">
             <MonthYearPicker
               label="From"
@@ -487,11 +317,9 @@ export const Analytics: React.FC = () => {
               onChange={(value) => setMonthRange(prev => ({ ...prev, startMonth: value }))}
               className="w-44 sm:w-52"
             />
-
             <div className="flex items-center justify-center pb-2.5 px-2">
               <div className="w-6 h-px bg-gradient-to-r from-gray-600 via-gray-400 to-gray-600"></div>
             </div>
-
             <MonthYearPicker
               label="To"
               value={monthRange.endMonth}
@@ -504,46 +332,69 @@ export const Analytics: React.FC = () => {
 
       {/* Stats Cards - Row 1 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-        {topCards.map((stat, index) => (
-          <motion.div
-            key={stat.title}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: index * 0.1 }}
-          >
-            <Card hover className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                  <stat.icon className={`w-5 h-5 ${stat.color}`} />
-                </div>
-              </div>
-              <p className="text-sm text-gray-400 mb-1">{stat.title}</p>
-              <p className="text-xl font-bold text-white">{formatCurrency(stat.value)}</p>
-            </Card>
-          </motion.div>
-        ))}
+        <StatCard
+          label="Total Sales"
+          value={formatCurrencyCompact(analytics.totalSales)}
+          icon={TrendingUp}
+          variant="success"
+          animationDelay={0}
+          subtitle={<span className="text-[11px] text-gray-500">{formatCurrency(analytics.totalSales)}</span>}
+        />
+        <StatCard
+          label="Total Purchases"
+          value={formatCurrencyCompact(analytics.totalPurchases)}
+          icon={TrendingDown}
+          variant="danger"
+          animationDelay={0.05}
+          subtitle={<span className="text-[11px] text-gray-500">{formatCurrency(analytics.totalPurchases)}</span>}
+        />
+        <StatCard
+          label="Other Income"
+          value={formatCurrencyCompact(analytics.totalIncome)}
+          icon={TrendingUp}
+          variant="emerald"
+          animationDelay={0.1}
+          subtitle={<span className="text-[11px] text-gray-500">{formatCurrency(analytics.totalIncome)}</span>}
+        />
+        <StatCard
+          label="Net Expenses"
+          value={formatCurrencyCompact(analytics.totalExpenses)}
+          icon={TrendingDown}
+          variant="warning"
+          animationDelay={0.15}
+          subtitle={<span className="text-[11px] text-gray-500">{formatCurrency(analytics.totalExpenses)}</span>}
+        />
+        <StatCard
+          label="Gross Profit"
+          value={formatCurrencyCompact(analytics.grossProfit)}
+          icon={DollarSign}
+          variant={analytics.grossProfit >= 0 ? 'success' : 'danger'}
+          animationDelay={0.2}
+          subtitle={
+            <div>
+              <span className={`text-xs font-medium ${analytics.grossProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {analytics.grossProfit >= 0 ? 'Profit' : 'Loss'}
+              </span>
+              <span className="text-[11px] text-gray-500 ml-2">{formatCurrency(analytics.grossProfit)}</span>
+            </div>
+          }
+        />
       </div>
 
-      {/* Row 2: Net Profit cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-4">
-        {bottomCards.map((stat, index) => (
-          <motion.div
-            key={stat.title}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: index * 0.1 }}
-          >
-            <Card hover className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                  <stat.icon className={`w-5 h-5 ${stat.color}`} />
-                </div>
-              </div>
-              <p className="text-sm text-gray-400 mb-2">{stat.title}</p>
-              {/* Net Profit breakdown with stock deltas */}
-              <div className="space-y-1">
-                <p className="text-xl font-bold text-white">{formatCurrency(analytics.grossProfit)}</p>
-                <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
+      {/* Row 2: Net Profit + Manual Net Profit */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.25 }}
+        >
+          <Card className="p-5 h-full">
+            <div className="flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-gray-400 mb-1 font-medium">Net Profit</p>
+                <p className="text-2xl font-bold text-white">{formatCurrencyCompact(analytics.grossProfit)}</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">{formatCurrency(analytics.grossProfit)}</p>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-sm">
                   <span className={analytics.goldDeltaGrams >= 0 ? 'text-yellow-400' : 'text-yellow-500'}>
                     {analytics.goldDeltaGrams >= 0 ? '+' : ''}{new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(analytics.goldDeltaGrams)} gm Gold
                   </span>
@@ -552,176 +403,352 @@ export const Analytics: React.FC = () => {
                   </span>
                 </div>
               </div>
-            </Card>
-          </motion.div>
-        ))}
-
-        {/* Manual Net Profit (Rupees) */}
-        {manualCards.map((stat, index) => (
-          <motion.div
-            key={stat.title}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: index * 0.1 }}
-          >
-            <Card hover className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                  <stat.icon className={`w-5 h-5 ${stat.color}`} />
-                </div>
+              <div className={`p-3 rounded-xl shrink-0 ml-3 ${analytics.netProfit >= 0 ? 'bg-green-400/10' : 'bg-red-400/10'}`}>
+                <BarChart3 className={`w-6 h-6 ${analytics.netProfit >= 0 ? 'text-green-400' : 'text-red-400'}`} />
               </div>
-              <p className="text-sm text-gray-400 mb-2">{stat.title}</p>
-              <p className="text-xl font-bold text-white">{formatCurrency(stat.value)}</p>
-            </Card>
-          </motion.div>
-        ))}
+            </div>
+          </Card>
+        </motion.div>
+
+        <StatCard
+          label="Final Net Profit in ₹"
+          value={formatCurrencyCompact(manualNetProfit)}
+          icon={DollarSign}
+          variant="default"
+          animationDelay={0.3}
+          subtitle={<span className="text-[11px] text-gray-500">{formatCurrency(manualNetProfit)}</span>}
+        />
       </div>
 
+      {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Monthly Performance */}
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Monthly Performance</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={analytics.monthlyData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="month" stroke="#9ca3af" fontSize={12} />
-              <YAxis 
-                stroke="#9ca3af" 
-                fontSize={12}
-                tickFormatter={(value) => formatCurrencyInCR(value)}
-                domain={[0, Math.max(analytics.maxValue * 1.1, 1000000)]}
-              />
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: '#1f2937', 
-                  border: '1px solid #374151',
-                  borderRadius: '8px'
-                }}
-                formatter={(value: number) => [formatCurrencyInCR(value)]}
-              />
-              <Bar dataKey="sales" fill="#10b981" name="Sales" />
-              <Bar dataKey="purchases" fill="#ef4444" name="Purchases" />
-              <Bar dataKey="transferCharges" fill="#8b5cf6" name="Transfer Profit" />
-              <Bar dataKey="profit" fill="#3b82f6" name="Net Profit" />
-            </BarChart>
-          </ResponsiveContainer>
-        </Card>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+          <Card className="p-5">
+            <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Monthly Performance</h3>
+            <div style={{ height: 280 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={analytics.monthlyData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+                  <XAxis dataKey="month" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis
+                    stroke="#9ca3af"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(value) => formatCurrencyInCR(value)}
+                    domain={[0, Math.max(analytics.maxValue * 1.1, 1000000)]}
+                    width={55}
+                  />
+                  <Tooltip
+                    contentStyle={DARK_TOOLTIP_STYLE}
+                    formatter={(value: number) => [formatCurrencyInCR(value)]}
+                    labelStyle={{ color: '#9ca3af' }}
+                  />
+                  <Bar dataKey="sales" fill={TRADE_TYPE_COLORS.sell.hex} name="Sales" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="purchases" fill="#ef4444" name="Purchases" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="transferCharges" fill={TRADE_TYPE_COLORS.transfer.hex} name="Transfer Profit" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="profit" fill={TRADE_TYPE_COLORS.buy.hex} name="Net Profit" radius={[2, 2, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+        </motion.div>
 
         {/* Trade Type Distribution */}
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Trade Distribution</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={analytics.tradeTypes}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={120}
-                paddingAngle={5}
-                dataKey="value"
-              >
-                {analytics.tradeTypes.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: '#1f2937', 
-                  border: '1px solid #374151',
-                  borderRadius: '8px'
-                }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            {analytics.tradeTypes.map((type) => (
-              <div key={type.name} className="flex items-center space-x-2">
-                <div 
-                  className="w-3 h-3 rounded-full" 
-                  style={{ backgroundColor: type.color }}
-                />
-                <span className="text-sm text-gray-300">{type.name}: {type.value}</span>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
+          <Card className="p-5">
+            <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Trade Distribution</h3>
+            <div className="flex flex-col lg:flex-row items-center gap-4">
+              <div className="w-full lg:w-1/2" style={{ height: 220 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={analytics.tradeTypes}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={55}
+                      outerRadius={95}
+                      paddingAngle={3}
+                      dataKey="value"
+                    >
+                      {analytics.tradeTypes.map((entry, index) => (
+                        <Cell key={index} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={DARK_TOOLTIP_STYLE} />
+                  </PieChart>
+                </ResponsiveContainer>
               </div>
-            ))}
-          </div>
-        </Card>
+              <div className="w-full lg:w-1/2 space-y-2">
+                {analytics.tradeTypes.map((type) => (
+                  <div key={type.name} className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/[0.02]">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: type.color }} />
+                      <span className="text-xs text-gray-300">{type.name}</span>
+                    </div>
+                    <span className="text-xs font-medium text-white">{type.value} trades</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Card>
+        </motion.div>
 
         {/* Profit Trend */}
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Profit Trend</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={analytics.monthlyData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="month" stroke="#9ca3af" fontSize={12} />
-              <YAxis 
-                stroke="#9ca3af" 
-                fontSize={12}
-                tickFormatter={(value) => formatCurrencyInCR(value)}
-                domain={[0, Math.max(analytics.maxValue * 1.1, 1000000)]}
-              />
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: '#1f2937', 
-                  border: '1px solid #374151',
-                  borderRadius: '8px'
-                }}
-                formatter={(value: number) => [formatCurrencyInCR(value), 'Profit']}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="profit" 
-                stroke="#3b82f6" 
-                strokeWidth={2}
-                dot={{ fill: '#3b82f6', strokeWidth: 2, r: 4 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </Card>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
+          <Card className="p-5">
+            <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Profit Trend</h3>
+            <div style={{ height: 280 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={analytics.monthlyData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+                  <XAxis dataKey="month" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis
+                    stroke="#9ca3af"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(value) => formatCurrencyInCR(value)}
+                    domain={[0, Math.max(analytics.maxValue * 1.1, 1000000)]}
+                    width={55}
+                  />
+                  <Tooltip
+                    contentStyle={DARK_TOOLTIP_STYLE}
+                    formatter={(value: number) => [formatCurrencyInCR(value), 'Profit']}
+                    labelStyle={{ color: '#9ca3af' }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="profit"
+                    stroke={TRADE_TYPE_COLORS.sell.hex}
+                    strokeWidth={2}
+                    dot={{ fill: TRADE_TYPE_COLORS.sell.hex, strokeWidth: 2, r: 4 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+        </motion.div>
 
         {/* Metal Distribution */}
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Metal Type Distribution</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={analytics.metalDistribution}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={120}
-                paddingAngle={5}
-                dataKey="value"
-              >
-                {analytics.metalDistribution.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: '#1f2937', 
-                  border: '1px solid #374151',
-                  borderRadius: '8px'
-                }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="mt-4 space-y-2">
-            {analytics.metalDistribution.map((metal) => (
-              <div key={metal.name} className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <div 
-                    className="w-3 h-3 rounded-full" 
-                    style={{ backgroundColor: metal.color }}
-                  />
-                  <span className="text-sm text-gray-300">{metal.name}</span>
-                </div>
-                <span className="text-sm text-white font-medium">{metal.value} trades</span>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }}>
+          <Card className="p-5">
+            <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Metal Distribution</h3>
+            <div className="flex flex-col lg:flex-row items-center gap-4">
+              <div className="w-full lg:w-1/2" style={{ height: 220 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={analytics.metalDistribution}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={55}
+                      outerRadius={95}
+                      paddingAngle={3}
+                      dataKey="value"
+                    >
+                      {analytics.metalDistribution.map((entry, index) => (
+                        <Cell key={index} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={DARK_TOOLTIP_STYLE} />
+                  </PieChart>
+                </ResponsiveContainer>
               </div>
-            ))}
-          </div>
-        </Card>
+              <div className="w-full lg:w-1/2 space-y-2">
+                {analytics.metalDistribution.map((metal) => (
+                  <div key={metal.name} className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/[0.02]">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: metal.color }} />
+                      <span className="text-xs text-gray-300">{metal.name}</span>
+                    </div>
+                    <span className="text-xs font-medium text-white">{metal.value} trades</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Card>
+        </motion.div>
       </div>
+
+      {/* Ghaat (Jewellery) P&L Section */}
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
+        <div className="flex items-center space-x-3 mb-4">
+          <div className="w-9 h-9 bg-gradient-to-r from-amber-500 to-yellow-600 rounded-xl flex items-center justify-center">
+            <Gem className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-white font-display">Ghaat P&L</h2>
+            <p className="text-gray-400 text-xs">Jewellery profit & loss in gold grams</p>
+          </div>
+        </div>
+      </motion.div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <StatCard
+          label="Fine Gold Bought"
+          value={`${ghaatAnalytics.pnl.totalBuyFineGold.toFixed(3)} gm`}
+          icon={TrendingDown}
+          variant="warning"
+          animationDelay={0.55}
+          subtitle={<span className="text-[11px] text-gray-500">Given to karigars</span>}
+        />
+        <StatCard
+          label="Fine Gold Sold"
+          value={`${ghaatAnalytics.pnl.totalSellFineGold.toFixed(3)} gm`}
+          icon={TrendingUp}
+          variant="emerald"
+          animationDelay={0.6}
+          subtitle={<span className="text-[11px] text-gray-500">Charged to merchants</span>}
+        />
+        <StatCard
+          label="Gold Labor Paid"
+          value={`${ghaatAnalytics.pnl.goldLaborPaid.toFixed(3)} gm`}
+          icon={DollarSign}
+          variant="purple"
+          animationDelay={0.65}
+          subtitle={<span className="text-[11px] text-gray-500">Labor in gold</span>}
+        />
+        <StatCard
+          label="Jewellery Stock"
+          value={`${ghaatAnalytics.totalStockFineGold.toFixed(3)} gm`}
+          icon={Gem}
+          variant="gold"
+          animationDelay={0.7}
+          subtitle={<span className="text-[11px] text-gray-500">Fine gold in inventory</span>}
+        />
+        <StatCard
+          label="Net Gold Profit"
+          value={`${Math.abs(ghaatAnalytics.pnl.netGoldProfit).toFixed(3)} gm`}
+          icon={ghaatAnalytics.pnl.netGoldProfit >= 0 ? TrendingUp : TrendingDown}
+          variant={ghaatAnalytics.pnl.netGoldProfit >= 0 ? 'success' : 'danger'}
+          animationDelay={0.75}
+          subtitle={
+            <span className={`text-xs font-medium ${ghaatAnalytics.pnl.netGoldProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+              {ghaatAnalytics.pnl.netGoldProfit >= 0 ? 'Profit' : 'Loss'}
+            </span>
+          }
+        />
+      </div>
+
+      {/* Monthly Jewellery Profit Chart */}
+      {ghaatAnalytics.monthlyProfit.length > 0 && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.78 }}>
+          <Card className="p-5">
+            <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Monthly Jewellery Profit (Fine Gold gm)</h3>
+            <div style={{ height: 280 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={ghaatAnalytics.monthlyProfit}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+                  <XAxis dataKey="month" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis
+                    stroke="#9ca3af"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v: number) => `${v.toFixed(1)}`}
+                    width={45}
+                  />
+                  <Tooltip
+                    contentStyle={DARK_TOOLTIP_STYLE}
+                    formatter={(value: number, name: string) => [
+                      `${value.toFixed(3)} gm`,
+                      name === 'stockDeltaProfit' ? 'Stock Delta' : 'Transaction P&L',
+                    ]}
+                    labelStyle={{ color: '#9ca3af' }}
+                  />
+                  <Legend
+                    formatter={(value: string) => value === 'stockDeltaProfit' ? 'Stock Delta' : 'Transaction P&L'}
+                    wrapperStyle={{ fontSize: 11 }}
+                  />
+                  <Bar dataKey="stockDeltaProfit" fill="#f59e0b" name="stockDeltaProfit" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="transactionProfit" fill="#10b981" name="transactionProfit" radius={[2, 2, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+        </motion.div>
+      )}
+
+      {/* Category Stock Distribution */}
+      {ghaatAnalytics.categoryData.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}>
+            <Card className="p-5">
+              <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Jewellery Stock by Category</h3>
+              <div className="flex flex-col lg:flex-row items-center gap-4">
+                <div className="w-full lg:w-1/2" style={{ height: 220 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={ghaatAnalytics.categoryData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={55}
+                        outerRadius={95}
+                        paddingAngle={3}
+                        dataKey="value"
+                      >
+                        {ghaatAnalytics.categoryData.map((entry, index) => (
+                          <Cell key={index} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={DARK_TOOLTIP_STYLE}
+                        formatter={(value: number) => [`${value} gm`, 'Fine Gold']}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="w-full lg:w-1/2 space-y-2">
+                  {ghaatAnalytics.categoryData.map((cat) => (
+                    <div key={cat.name} className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/[0.02]">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                        <span className="text-xs text-gray-300">{cat.name}</span>
+                      </div>
+                      <span className="text-xs font-medium text-white">{cat.value} gm</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.85 }}>
+            <Card className="p-5">
+              <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Ghaat Summary</h3>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between py-2 border-b border-gray-700/50">
+                  <span className="text-sm text-gray-400">Total Transactions</span>
+                  <span className="text-sm font-semibold text-white">{ghaatTransactions.length}</span>
+                </div>
+                <div className="flex items-center justify-between py-2 border-b border-gray-700/50">
+                  <span className="text-sm text-gray-400">Buy Transactions</span>
+                  <span className="text-sm font-semibold text-amber-400">{ghaatTransactions.filter(t => t.type === 'buy').length}</span>
+                </div>
+                <div className="flex items-center justify-between py-2 border-b border-gray-700/50">
+                  <span className="text-sm text-gray-400">Pending Sales</span>
+                  <span className="text-sm font-semibold text-amber-400">{ghaatAnalytics.pendingCount}</span>
+                </div>
+                <div className="flex items-center justify-between py-2 border-b border-gray-700/50">
+                  <span className="text-sm text-gray-400">Confirmed Sales</span>
+                  <span className="text-sm font-semibold text-emerald-400">{ghaatAnalytics.soldCount}</span>
+                </div>
+                <div className="flex items-center justify-between py-2 border-b border-gray-700/50">
+                  <span className="text-sm text-gray-400">Cash Labor Paid</span>
+                  <span className="text-sm font-semibold text-white">{new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(ghaatAnalytics.pnl.cashLaborPaid)}</span>
+                </div>
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-sm text-gray-400">Gold Labor Paid</span>
+                  <span className="text-sm font-semibold text-yellow-400">{ghaatAnalytics.pnl.goldLaborPaid.toFixed(3)} gm</span>
+                </div>
+              </div>
+            </Card>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 };

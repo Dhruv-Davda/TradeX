@@ -1,9 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Replace these with your actual Supabase project credentials
-// You can get these from your Supabase project settings → API
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://ghnklvwvglwrhioetezb.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdobmtsdnd2Z2x3cmhpb2V0ZXpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc1MDU3ODAsImV4cCI6MjA3MzA4MTc4MH0.dwdcbR7HMXmqjF1vDivAsOTnvsuMPHGT2xQIQBknFWM';
+// Set these in your .env file:
+//   VITE_SUPABASE_URL=your-supabase-url
+//   VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing required environment variables: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY. Please set them in your .env file.');
+}
 
 // Note: Removed automatic cache clearing as it was causing authentication issues
 // If you need to clear cache, do it manually in browser dev tools

@@ -7,14 +7,16 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import { TradeEditModal } from '../ui/TradeEditModal';
-import { Merchant, Trade } from '../../types';
+import { Merchant, Trade, GhaatTransaction } from '../../types';
 import { formatCurrency, calculateMerchantBalance, calculateTradesWithRunningBalance, TradeWithBalance } from '../../utils/calculations';
 import { TradeService } from '../../services/tradeService';
 import { MerchantsService } from '../../services/merchantsService';
+import { GhaatService } from '../../services/ghaatService';
 
 export const Merchants: React.FC = () => {
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [trades, setTrades] = useState<Trade[]>([]);
+  const [ghaatTransactions, setGhaatTransactions] = useState<GhaatTransaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingMerchant, setEditingMerchant] = useState<Merchant | null>(null);
@@ -47,6 +49,12 @@ export const Merchants: React.FC = () => {
         console.error('❌ Merchants: Error loading trades:', tradesError);
       } else {
         setTrades(dbTrades);
+      }
+
+      // Load ghaat transactions for jewellery dues
+      const { transactions: ghaatTxns, error: ghaatError } = await GhaatService.getTransactions();
+      if (!ghaatError) {
+        setGhaatTransactions(ghaatTxns);
       }
     } catch (error) {
       console.error('❌ Merchants: Unexpected error loading data:', error);
@@ -428,6 +436,7 @@ export const Merchants: React.FC = () => {
                 {filteredMerchants.map((merchant, index) => {
             const balance = calculateMerchantBalance(merchant.id, trades, merchant.totalDue, merchant.totalOwe);
             const merchantTradeCount = trades.filter(trade => trade.merchantId === merchant.id).length;
+            const jewelleryDues = GhaatService.calculateMerchantJewelleryDues(merchant.id, ghaatTransactions);
             
             
             return (
@@ -502,6 +511,25 @@ export const Merchants: React.FC = () => {
                       <span className="text-white font-medium">{merchantTradeCount}</span>
                     </div>
                   </div>
+
+                  {/* Jewellery Dues */}
+                  {(jewelleryDues.fineGoldPending > 0 || jewelleryDues.cashDue > 0) && (
+                    <div className="space-y-1.5 mb-4 p-2.5 bg-amber-500/5 border border-amber-500/15 rounded-lg">
+                      <span className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Jewellery</span>
+                      {jewelleryDues.fineGoldPending > 0 && (
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-gray-400">Pending Gold:</span>
+                          <span className="text-yellow-400 font-medium">{jewelleryDues.fineGoldPending.toFixed(3)} gm</span>
+                        </div>
+                      )}
+                      {jewelleryDues.cashDue > 0 && (
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-gray-400">Cash Shortfall:</span>
+                          <span className="text-red-400 font-medium">{formatCurrency(jewelleryDues.cashDue)}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div className="pt-3 border-t border-gray-700">
                     <p className="text-xs text-gray-500">
@@ -644,6 +672,29 @@ export const Merchants: React.FC = () => {
                   </span>
                 </div>
               </div>
+
+              {/* Jewellery Dues in Details Modal */}
+              {(() => {
+                const jd = GhaatService.calculateMerchantJewelleryDues(selectedMerchant.id, ghaatTransactions);
+                if (jd.fineGoldPending <= 0 && jd.cashDue <= 0) return null;
+                return (
+                  <div className="pt-3 border-t border-gray-700 space-y-2">
+                    <span className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Jewellery Dues</span>
+                    {jd.fineGoldPending > 0 && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-400">Pending Gold:</span>
+                        <span className="text-yellow-400 font-medium">{jd.fineGoldPending.toFixed(3)} gm fine</span>
+                      </div>
+                    )}
+                    {jd.cashDue > 0 && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-400">Cash Shortfall:</span>
+                        <span className="text-red-400 font-medium">{formatCurrency(jd.cashDue)}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               <Button onClick={handleViewTradeHistory} className="w-full justify-start" variant="outline">
                 <History className="w-5 h-5 mr-3" />

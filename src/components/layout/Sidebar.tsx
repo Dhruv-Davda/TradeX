@@ -1,11 +1,11 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { 
-  Home, 
-  ShoppingCart, 
-  TrendingUp, 
-  History, 
-  BarChart3, 
+import {
+  Home,
+  ShoppingCart,
+  TrendingUp,
+  History,
+  BarChart3,
   Receipt,
   Users,
   Coins,
@@ -13,23 +13,55 @@ import {
   Scale,
   DollarSign,
   Database,
-  Layers
+  Layers,
+  Gem,
+  ShoppingBag,
+  Tag,
+  Hammer,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: Home },
-  { name: 'Buy', href: '/buy', icon: ShoppingCart },
-  { name: 'Sell', href: '/sell', icon: TrendingUp },
-  { name: 'Transfer', href: '/transfer', icon: Receipt },
-  { name: 'Settlement', href: '/settlement', icon: Coins },
-  // { name: 'Bulk Entry', href: '/bulk-entry', icon: Layers }, // Hidden - using inline multi-entry feature instead
-  { name: 'Trade History', href: '/history', icon: History },
-  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
-  { name: 'Expenses', href: '/expenses', icon: Receipt },
-  { name: 'Income', href: '/income', icon: DollarSign },
-  { name: 'Merchants', href: '/merchants', icon: Users },
-  { name: 'Data Migration', href: '/migration', icon: Database },
+interface NavItem {
+  name: string;
+  href: string;
+  icon: React.FC<{ className?: string }>;
+}
+
+interface NavSection {
+  label?: string;
+  items: NavItem[];
+}
+
+const navigationSections: NavSection[] = [
+  {
+    items: [
+      { name: 'Dashboard', href: '/dashboard', icon: Home },
+      { name: 'Buy', href: '/buy', icon: ShoppingCart },
+      { name: 'Sell', href: '/sell', icon: TrendingUp },
+      { name: 'Transfer', href: '/transfer', icon: Receipt },
+      { name: 'Settlement', href: '/settlement', icon: Coins },
+      { name: 'Trade History', href: '/history', icon: History },
+      { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+      { name: 'Expenses', href: '/expenses', icon: Receipt },
+      { name: 'Income', href: '/income', icon: DollarSign },
+      { name: 'Merchants', href: '/merchants', icon: Users },
+    ],
+  },
+  {
+    label: 'Jewellery',
+    items: [
+      { name: 'Ghaat', href: '/ghaat', icon: Gem },
+      { name: 'Ghaat Buy', href: '/ghaat-buy', icon: ShoppingBag },
+      { name: 'Ghaat Sell', href: '/ghaat-sell', icon: Tag },
+      { name: 'Karigars', href: '/karigars', icon: Hammer },
+      { name: 'Raw Gold', href: '/raw-gold', icon: Coins },
+    ],
+  },
+  {
+    items: [
+      { name: 'Data Migration', href: '/migration', icon: Database },
+    ],
+  },
 ];
 
 interface SidebarProps {
@@ -62,55 +94,67 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onMobileClose })
         
         {/* Navigation */}
         <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto sidebar-scroll relative">
-          
-          <div className="pt-2 pb-2">
-            {navigation.map((item, index) => (
-            <NavLink
-              key={item.name}
-              to={item.href}
-              onClick={onMobileClose}
-              className={({ isActive }) =>
-                `flex items-center px-4 py-3 rounded-xl transition-all duration-200 group relative ${
-                  isActive
-                    ? 'bg-gradient-to-r from-primary-500/20 to-accent-500/20 text-white shadow-glow border border-primary-500/30'
-                    : 'text-secondary-300 hover:bg-white/5 hover:text-white hover:shadow-soft'
-                }`
-              }
-            >
-              {({ isActive }) => (
-                <motion.div 
-                  className="flex items-center w-full"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ 
-                    type: "spring", 
-                    stiffness: 300, 
-                    damping: 20,
-                    delay: index * 0.1
-                  }}
-                  whileHover={{ x: 4 }}
-                >
-                  <div className={`p-2 rounded-lg mr-3 transition-all duration-200 ${
-                    isActive 
-                      ? 'bg-primary-500/20 text-primary-400' 
-                      : 'text-secondary-400 group-hover:text-primary-400 group-hover:bg-primary-500/10'
-                  }`}>
-                    <item.icon className="w-5 h-5" />
+          {(() => {
+            let globalIndex = 0;
+            return navigationSections.map((section, sectionIndex) => (
+              <div key={sectionIndex} className="pt-2 pb-2">
+                {section.label && (
+                  <div className="px-4 py-2 mt-2 mb-1">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-secondary-500">{section.label}</span>
                   </div>
-                  <span className="font-medium text-sm">{item.name}</span>
-                  {isActive && (
-                    <motion.div
-                      className="absolute right-2 w-2 h-2 bg-primary-400 rounded-full"
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                    />
-                  )}
-                </motion.div>
-              )}
-            </NavLink>
-            ))}
-          </div>
+                )}
+                {section.items.map((item) => {
+                  const index = globalIndex++;
+                  return (
+                    <NavLink
+                      key={item.name}
+                      to={item.href}
+                      onClick={onMobileClose}
+                      className={({ isActive }) =>
+                        `flex items-center px-4 py-3 rounded-xl transition-all duration-200 group relative ${
+                          isActive
+                            ? 'bg-gradient-to-r from-primary-500/20 to-accent-500/20 text-white shadow-glow border border-primary-500/30'
+                            : 'text-secondary-300 hover:bg-white/5 hover:text-white hover:shadow-soft'
+                        }`
+                      }
+                    >
+                      {({ isActive }) => (
+                        <motion.div
+                          className="flex items-center w-full"
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{
+                            type: "spring",
+                            stiffness: 300,
+                            damping: 20,
+                            delay: index * 0.05
+                          }}
+                          whileHover={{ x: 4 }}
+                        >
+                          <div className={`p-2 rounded-lg mr-3 transition-all duration-200 ${
+                            isActive
+                              ? 'bg-primary-500/20 text-primary-400'
+                              : 'text-secondary-400 group-hover:text-primary-400 group-hover:bg-primary-500/10'
+                          }`}>
+                            <item.icon className="w-5 h-5" />
+                          </div>
+                          <span className="font-medium text-sm">{item.name}</span>
+                          {isActive && (
+                            <motion.div
+                              className="absolute right-2 w-2 h-2 bg-primary-400 rounded-full"
+                              initial={{ scale: 0 }}
+                              animate={{ scale: 1 }}
+                              transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                            />
+                          )}
+                        </motion.div>
+                      )}
+                    </NavLink>
+                  );
+                })}
+              </div>
+            ));
+          })()}
         </nav>
         
         {/* Stock Management

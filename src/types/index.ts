@@ -84,6 +84,102 @@ export interface Stock {
   notes?: string;
 }
 
+// Ghaat (Jewellery) types
+export type GhaatTransactionType = 'buy' | 'sell';
+export type LaborType = 'cash' | 'gold';
+export type GhaatSellStatus = 'pending' | 'sold';
+export type GhaatSettlementType = 'gold' | 'cash' | 'mixed';
+
+export interface Karigar {
+  id: string;
+  name: string;
+  phone?: string;
+  address?: string;
+  notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface GhaatTransaction {
+  id: string;
+  type: GhaatTransactionType;
+  karigarId?: string;
+  karigarName?: string;
+  merchantId?: string;
+  merchantName?: string;
+  category: string;
+  units: number;
+  grossWeightPerUnit: number;
+  purity: number;
+  totalGrossWeight: number;
+  fineGold: number;
+  laborType?: LaborType;
+  laborAmount?: number;
+  amountReceived?: number;
+  notes?: string;
+  transactionDate?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  // Payment to karigar fields (buy transactions only)
+  goldGivenWeight?: number;
+  goldGivenPurity?: number;
+  goldGivenFine?: number;
+  cashPaid?: number;
+  // Pending/Sold status flow fields
+  status?: GhaatSellStatus;
+  groupId?: string;
+  ratePer10gm?: number;
+  totalAmount?: number;
+  settlementType?: GhaatSettlementType;
+  goldReturnedWeight?: number;
+  goldReturnedPurity?: number;
+  goldReturnedFine?: number;
+  cashReceived?: number;
+  confirmedDate?: string;
+  confirmedUnits?: number;
+  confirmedGrossWeight?: number;
+  confirmedFineGold?: number;
+  duesShortfall?: number;
+}
+
+export interface PendingGhaatSaleGroup {
+  groupId: string;
+  merchantId: string;
+  merchantName: string;
+  dateGiven: string;
+  items: GhaatTransaction[];
+  totalUnits: number;
+  totalGrossWeight: number;
+  totalFineGold: number;
+}
+
+// Raw Gold Ledger types
+export type RawGoldLedgerType = 'in' | 'out';
+export type RawGoldLedgerSource = 'merchant_return' | 'karigar_payment' | 'manual_adjustment' | 'initial_balance';
+
+export interface RawGoldLedgerEntry {
+  id: string;
+  type: RawGoldLedgerType;
+  source: RawGoldLedgerSource;
+  referenceId?: string;
+  grossWeight: number;
+  purity: number;
+  fineGold: number;
+  cashAmount?: number;
+  counterpartyName: string;
+  counterpartyId?: string;
+  notes?: string;
+  transactionDate: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface JewelleryCategory {
+  id: string;
+  name: string;
+  createdAt: Date;
+}
+
 export interface Analytics {
   totalRevenue: number;
   totalExpenses: number;
