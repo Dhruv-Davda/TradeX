@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useForm } from 'react-hook-form';
-import { TrendingUp, Plus, Trash2, Eye, Clock, CheckCircle, Package } from 'lucide-react';
+import { TrendingUp, Plus, Trash2, Eye, Clock, CheckCircle, Package, History, Edit } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -10,14 +10,17 @@ import { Modal } from '../ui/Modal';
 import { PageSkeleton } from '../ui/Skeleton';
 import { EmptyState } from '../ui/EmptyState';
 import { GhaatConfirmSaleModal } from '../ui/GhaatConfirmSaleModal';
-import { Merchant, PendingGhaatSaleGroup } from '../../types';
+import { GhaatEditModal } from '../ui/GhaatEditModal';
+import { Merchant, GhaatTransaction, PendingGhaatSaleGroup } from '../../types';
+import { format } from 'date-fns';
 import { generateId } from '../../utils/calculations';
 import { GhaatService } from '../../services/ghaatService';
 import { MerchantsService } from '../../services/merchantsService';
 import { JewelleryCategoryService } from '../../services/jewelleryCategoryService';
-import { DEFAULT_JEWELLERY_CATEGORIES } from '../../lib/constants';
+import { DEFAULT_JEWELLERY_CATEGORIES, GHAAT_STATUS_COLORS } from '../../lib/constants';
+import { formatCurrency } from '../../utils/calculations';
 
-type SellTab = 'give' | 'pending';
+type SellTab = 'give' | 'pending' | 'history';
 
 interface GiveToMerchantFormData {
   merchantId: string;
@@ -59,6 +62,12 @@ export const GhaatSell: React.FC = () => {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingLoading, setPendingLoading] = useState(false);
 
+  // "Sold History" tab state
+  const [soldTransactions, setSoldTransactions] = useState<GhaatTransaction[]>([]);
+  const [soldLoading, setSoldLoading] = useState(false);
+  const [editingTxn, setEditingTxn] = useState<GhaatTransaction | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+
   const { register, handleSubmit, watch, reset, setValue, formState: { errors } } = useForm<GiveToMerchantFormData>({
     defaultValues: {
       purity: 95,
@@ -99,9 +108,33 @@ export const GhaatSell: React.FC = () => {
     }
   };
 
+  const loadSoldHistory = async () => {
+    setSoldLoading(true);
+    try {
+      const { transactions: allTxns, error } = await GhaatService.getTransactions();
+      if (!error) {
+        setSoldTransactions(
+          allTxns
+            .filter(t => t.type === 'sell' && t.status === 'sold')
+            .sort((a, b) => {
+              const da = a.confirmedDate || a.transactionDate || '';
+              const db = b.confirmedDate || b.transactionDate || '';
+              return db.localeCompare(da);
+            })
+        );
+      }
+    } catch (error) {
+      console.error('Error loading sold history:', error);
+    } finally {
+      setSoldLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'pending') {
       loadPendingSales();
+    } else if (activeTab === 'history') {
+      loadSoldHistory();
     }
   }, [activeTab]);
 
@@ -297,6 +330,14 @@ export const GhaatSell: React.FC = () => {
               {pendingSaleGroups.length}
             </span>
           )}
+        </button>
+        <button
+          onClick={() => setActiveTab('history')}
+          className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+            activeTab === 'history' ? 'bg-emerald-500 text-white' : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          <History className="w-4 h-4" /> Sold History
         </button>
       </div>
 
@@ -571,6 +612,82 @@ export const GhaatSell: React.FC = () => {
         </div>
       </Modal>
 
+      {/* Tab 3: Sold History */}
+      {activeTab === 'history' && (
+        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3 }}>
+          {soldLoading ? (
+            <PageSkeleton cards={3} />
+          ) : soldTransactions.length === 0 ? (
+            <EmptyState
+              icon={History}
+              title="No Sold Transactions"
+              description="Confirmed sales will appear here."
+            />
+          ) : (
+            <div className="space-y-3">
+              {soldTransactions.map(txn => (
+                <Card key={txn.id} className="p-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 space-y-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-white font-semibold">{txn.category}</span>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${GHAAT_STATUS_COLORS.sold.bg} ${GHAAT_STATUS_COLORS.sold.text} border ${GHAAT_STATUS_COLORS.sold.border}`}>
+                          Sold
+                        </span>
+                        {txn.merchantName && (
+                          <span className="text-sm text-gray-400">— {txn.merchantName}</span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1 text-sm">
+                        <div>
+                          <span className="text-gray-500">Confirmed:</span>
+                          <span className="text-gray-300 ml-1">
+                            {txn.confirmedDate ? format(new Date(txn.confirmedDate), 'dd MMM yyyy') : '—'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Units:</span>
+                          <span className="text-white ml-1">{txn.confirmedUnits ?? txn.units} pcs</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Fine Gold:</span>
+                          <span className="text-yellow-400 ml-1 font-medium">{(txn.confirmedFineGold ?? txn.fineGold).toFixed(3)} gm</span>
+                        </div>
+                        {txn.ratePer10gm && (
+                          <div>
+                            <span className="text-gray-500">Rate/10gm:</span>
+                            <span className="text-gray-300 ml-1">{formatCurrency(txn.ratePer10gm)}</span>
+                          </div>
+                        )}
+                        {txn.totalAmount && (
+                          <div>
+                            <span className="text-gray-500">Total:</span>
+                            <span className="text-green-400 ml-1 font-medium">{formatCurrency(txn.totalAmount)}</span>
+                          </div>
+                        )}
+                        {txn.settlementType && (
+                          <div>
+                            <span className="text-gray-500">Settlement:</span>
+                            <span className="text-gray-300 ml-1 capitalize">{txn.settlementType}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { setEditingTxn(txn); setShowEditModal(true); }}
+                    >
+                      <Edit className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </motion.div>
+      )}
+
       {/* Confirm Sale Modal */}
       <GhaatConfirmSaleModal
         isOpen={showConfirmModal}
@@ -580,6 +697,23 @@ export const GhaatSell: React.FC = () => {
           setShowConfirmModal(false);
           setSelectedGroup(null);
           loadPendingSales();
+        }}
+      />
+
+      {/* Edit Modal (read-only for sold) */}
+      <GhaatEditModal
+        isOpen={showEditModal}
+        onClose={() => { setShowEditModal(false); setEditingTxn(null); }}
+        transaction={editingTxn}
+        onTransactionUpdated={(updated) => {
+          setSoldTransactions(soldTransactions.map(t => t.id === updated.id ? updated : t));
+          setShowEditModal(false);
+          setEditingTxn(null);
+        }}
+        onTransactionDeleted={(id) => {
+          setSoldTransactions(soldTransactions.filter(t => t.id !== id));
+          setShowEditModal(false);
+          setEditingTxn(null);
         }}
       />
     </div>

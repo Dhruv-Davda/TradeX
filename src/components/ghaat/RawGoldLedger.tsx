@@ -16,6 +16,7 @@ import { RawGoldLedgerService } from '../../services/rawGoldLedgerService';
 const SOURCE_LABELS: Record<string, string> = {
   merchant_return: 'Merchant Gold Return',
   karigar_payment: 'Paid to Karigar',
+  ghaat_settlement: 'Ghaat Settlement',
   manual_adjustment: 'Manual Adjustment',
   initial_balance: 'Opening Balance',
 };

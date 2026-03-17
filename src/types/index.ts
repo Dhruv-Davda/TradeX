@@ -155,7 +155,7 @@ export interface PendingGhaatSaleGroup {
 
 // Raw Gold Ledger types
 export type RawGoldLedgerType = 'in' | 'out';
-export type RawGoldLedgerSource = 'merchant_return' | 'karigar_payment' | 'manual_adjustment' | 'initial_balance';
+export type RawGoldLedgerSource = 'merchant_return' | 'karigar_payment' | 'manual_adjustment' | 'initial_balance' | 'ghaat_settlement';
 
 export interface RawGoldLedgerEntry {
   id: string;
@@ -170,6 +170,28 @@ export interface RawGoldLedgerEntry {
   counterpartyId?: string;
   notes?: string;
   transactionDate: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Ghaat Settlement types
+export type GhaatPartyType = 'merchant' | 'karigar';
+export type GhaatSettlementDirection = 'receiving' | 'paying';
+
+export interface GhaatSettlement {
+  id: string;
+  partyType: GhaatPartyType;
+  partyId: string;
+  partyName: string;
+  direction: GhaatSettlementDirection;
+  cashAmount: number;
+  goldWeight: number;
+  goldPurity: number;
+  goldFine: number;
+  ratePer10gm?: number;
+  goldValue?: number;
+  notes?: string;
+  settlementDate: string;
   createdAt: Date;
   updatedAt: Date;
 }

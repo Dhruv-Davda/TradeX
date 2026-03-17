@@ -175,15 +175,6 @@ export const DEFAULT_JEWELLERY_CATEGORIES = [
   'Pendants', 'Bangles', 'Earrings', 'Mangalsutra', 'Other',
 ] as const;
 
-export const WEIGHT_BRACKETS = [
-  { label: 'Under 3 gm', min: 0, max: 3 },
-  { label: '3 - 5 gm', min: 3, max: 5 },
-  { label: '5 - 10 gm', min: 5, max: 10 },
-  { label: '10 - 15 gm', min: 10, max: 15 },
-  { label: '15 - 20 gm', min: 15, max: 20 },
-  { label: '20+ gm', min: 20, max: Infinity },
-] as const;
-
 export const GHAAT_TRANSACTION_COLORS = {
   buy: { bg: 'bg-amber-500/20', text: 'text-amber-400', border: 'border-amber-500/30', hex: '#f59e0b' },
   sell: { bg: 'bg-emerald-500/20', text: 'text-emerald-400', border: 'border-emerald-500/30', hex: '#10b981' },
