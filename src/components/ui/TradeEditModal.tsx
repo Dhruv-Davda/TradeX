@@ -14,6 +14,8 @@ export interface EditTradeFormData {
   weight: number;
   pricePerUnit: number;
   totalAmount: number;
+  amountPaid: number;
+  amountReceived: number;
   date: string;
   notes?: string;
 }
@@ -45,6 +47,8 @@ export const TradeEditModal: React.FC<TradeEditModalProps> = ({
       setValue('weight', trade.weight || 0);
       setValue('pricePerUnit', trade.pricePerUnit || 0);
       setValue('totalAmount', trade.totalAmount);
+      setValue('amountPaid', trade.amountPaid || 0);
+      setValue('amountReceived', trade.amountReceived || 0);
 
       // Format date for input field (YYYY-MM-DD format)
       const tradeDate = trade.tradeDate
@@ -88,6 +92,8 @@ export const TradeEditModal: React.FC<TradeEditModalProps> = ({
         weight: data.weight,
         pricePerUnit: data.pricePerUnit,
         totalAmount: data.totalAmount,
+        amountPaid: trade.type === 'buy' ? Number(data.amountPaid) || 0 : undefined,
+        amountReceived: trade.type === 'sell' ? Number(data.amountReceived) || 0 : undefined,
         date: data.date,
         notes: data.notes,
         updatedAt: new Date(),
@@ -283,6 +289,36 @@ export const TradeEditModal: React.FC<TradeEditModalProps> = ({
                 <p className="text-red-400 text-sm mt-1">{errors.totalAmount.message}</p>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Amount Paid (Buy) / Amount Received (Sell) */}
+        {watchedValues?.type === 'buy' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Amount Paid (₹)
+            </label>
+            <Input
+              {...register('amountPaid', { min: { value: 0, message: 'Cannot be negative' } })}
+              type="number"
+              step="0.01"
+              placeholder="0.00"
+              className="w-full"
+            />
+          </div>
+        )}
+        {watchedValues?.type === 'sell' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Amount Received (₹)
+            </label>
+            <Input
+              {...register('amountReceived', { min: { value: 0, message: 'Cannot be negative' } })}
+              type="number"
+              step="0.01"
+              placeholder="0.00"
+              className="w-full"
+            />
           </div>
         )}
 

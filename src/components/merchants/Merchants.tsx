@@ -7,16 +7,18 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import { TradeEditModal } from '../ui/TradeEditModal';
-import { Merchant, Trade, GhaatTransaction } from '../../types';
+import { Merchant, Trade, GhaatTransaction, GhaatSettlement } from '../../types';
 import { formatCurrency, calculateMerchantBalance, calculateTradesWithRunningBalance, TradeWithBalance } from '../../utils/calculations';
 import { TradeService } from '../../services/tradeService';
 import { MerchantsService } from '../../services/merchantsService';
 import { GhaatService } from '../../services/ghaatService';
+import { GhaatSettlementService } from '../../services/ghaatSettlementService';
 
 export const Merchants: React.FC = () => {
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [trades, setTrades] = useState<Trade[]>([]);
   const [ghaatTransactions, setGhaatTransactions] = useState<GhaatTransaction[]>([]);
+  const [ghaatSettlements, setGhaatSettlements] = useState<GhaatSettlement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingMerchant, setEditingMerchant] = useState<Merchant | null>(null);
@@ -51,11 +53,13 @@ export const Merchants: React.FC = () => {
         setTrades(dbTrades);
       }
 
-      // Load ghaat transactions for jewellery dues
-      const { transactions: ghaatTxns, error: ghaatError } = await GhaatService.getTransactions();
-      if (!ghaatError) {
-        setGhaatTransactions(ghaatTxns);
-      }
+      // Load ghaat transactions and settlements for jewellery dues
+      const [ghaatResult, settlementResult] = await Promise.all([
+        GhaatService.getTransactions(),
+        GhaatSettlementService.getSettlements(),
+      ]);
+      if (!ghaatResult.error) setGhaatTransactions(ghaatResult.transactions);
+      if (!settlementResult.error) setGhaatSettlements(settlementResult.settlements);
     } catch (error) {
       console.error('❌ Merchants: Unexpected error loading data:', error);
     } finally {
@@ -436,7 +440,7 @@ export const Merchants: React.FC = () => {
                 {filteredMerchants.map((merchant, index) => {
             const balance = calculateMerchantBalance(merchant.id, trades, merchant.totalDue, merchant.totalOwe);
             const merchantTradeCount = trades.filter(trade => trade.merchantId === merchant.id).length;
-            const jewelleryDues = GhaatService.calculateMerchantJewelleryDues(merchant.id, ghaatTransactions);
+            const jewelleryDues = GhaatSettlementService.calculateMerchantGhaatBalance(merchant.id, ghaatTransactions, ghaatSettlements);
             
             
             return (
@@ -513,7 +517,7 @@ export const Merchants: React.FC = () => {
                   </div>
 
                   {/* Jewellery Dues */}
-                  {(jewelleryDues.fineGoldPending > 0 || jewelleryDues.cashDue > 0) && (
+                  {(jewelleryDues.fineGoldPending > 0 || jewelleryDues.netCashDue > 0) && (
                     <div className="space-y-1.5 mb-4 p-2.5 bg-amber-500/5 border border-amber-500/15 rounded-lg">
                       <span className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Jewellery</span>
                       {jewelleryDues.fineGoldPending > 0 && (
@@ -522,10 +526,10 @@ export const Merchants: React.FC = () => {
                           <span className="text-yellow-400 font-medium">{jewelleryDues.fineGoldPending.toFixed(3)} gm</span>
                         </div>
                       )}
-                      {jewelleryDues.cashDue > 0 && (
+                      {jewelleryDues.netCashDue > 0 && (
                         <div className="flex justify-between items-center text-sm">
-                          <span className="text-gray-400">Cash Shortfall:</span>
-                          <span className="text-red-400 font-medium">{formatCurrency(jewelleryDues.cashDue)}</span>
+                          <span className="text-gray-400">Net Cash Due:</span>
+                          <span className="text-red-400 font-medium">{formatCurrency(jewelleryDues.netCashDue)}</span>
                         </div>
                       )}
                     </div>
@@ -675,8 +679,8 @@ export const Merchants: React.FC = () => {
 
               {/* Jewellery Dues in Details Modal */}
               {(() => {
-                const jd = GhaatService.calculateMerchantJewelleryDues(selectedMerchant.id, ghaatTransactions);
-                if (jd.fineGoldPending <= 0 && jd.cashDue <= 0) return null;
+                const jd = GhaatSettlementService.calculateMerchantGhaatBalance(selectedMerchant.id, ghaatTransactions, ghaatSettlements);
+                if (jd.fineGoldPending <= 0 && jd.netCashDue <= 0) return null;
                 return (
                   <div className="pt-3 border-t border-gray-700 space-y-2">
                     <span className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Jewellery Dues</span>
@@ -686,10 +690,10 @@ export const Merchants: React.FC = () => {
                         <span className="text-yellow-400 font-medium">{jd.fineGoldPending.toFixed(3)} gm fine</span>
                       </div>
                     )}
-                    {jd.cashDue > 0 && (
+                    {jd.netCashDue > 0 && (
                       <div className="flex justify-between items-center">
-                        <span className="text-gray-400">Cash Shortfall:</span>
-                        <span className="text-red-400 font-medium">{formatCurrency(jd.cashDue)}</span>
+                        <span className="text-gray-400">Net Cash Due:</span>
+                        <span className="text-red-400 font-medium">{formatCurrency(jd.netCashDue)}</span>
                       </div>
                     )}
                   </div>

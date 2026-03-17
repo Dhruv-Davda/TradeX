@@ -13,7 +13,7 @@ import { formatCurrency } from '../../utils/calculations';
 interface EditGhaatFormData {
   category: string;
   units: number;
-  grossWeightPerUnit: number;
+  totalGrossWeight: number;
   purity: number;
   laborType: string;
   laborAmount: number;
@@ -51,7 +51,7 @@ export const GhaatEditModal: React.FC<GhaatEditModalProps> = ({
     if (transaction && isOpen) {
       setValue('category', transaction.category);
       setValue('units', transaction.units);
-      setValue('grossWeightPerUnit', transaction.grossWeightPerUnit);
+      setValue('totalGrossWeight', transaction.totalGrossWeight);
       setValue('purity', transaction.purity);
       setValue('laborType', transaction.laborType || 'cash');
       setValue('laborAmount', transaction.laborAmount || 0);
@@ -73,9 +73,9 @@ export const GhaatEditModal: React.FC<GhaatEditModalProps> = ({
 
   // Auto-calculate display values
   const units = Number(watchedValues.units) || 0;
-  const weightPerUnit = Number(watchedValues.grossWeightPerUnit) || 0;
+  const totalGrossWeight = Number(watchedValues.totalGrossWeight) || 0;
   const purity = Number(watchedValues.purity) || 0;
-  const totalGrossWeight = units * weightPerUnit;
+  const grossWeightPerUnit = units > 0 ? totalGrossWeight / units : 0;
   const fineGold = totalGrossWeight * purity / 100;
   const editGoldGivenWeight = Number(watchedValues.goldGivenWeight) || 0;
   const editGoldGivenPurity = Number(watchedValues.goldGivenPurity) || 0;
@@ -85,7 +85,9 @@ export const GhaatEditModal: React.FC<GhaatEditModalProps> = ({
     if (!transaction) return;
 
     try {
-      const totalGW = Number(data.units) * Number(data.grossWeightPerUnit);
+      const totalGW = Number(data.totalGrossWeight);
+      const numUnits = Number(data.units);
+      const gwPerUnit = numUnits > 0 ? totalGW / numUnits : 0;
       const fg = totalGW * Number(data.purity) / 100;
 
       const goldGW = Number(data.goldGivenWeight) || 0;
@@ -95,8 +97,8 @@ export const GhaatEditModal: React.FC<GhaatEditModalProps> = ({
 
       const { transaction: updated, error } = await GhaatService.updateTransaction(transaction.id, {
         category: data.category,
-        units: Number(data.units),
-        grossWeightPerUnit: Number(data.grossWeightPerUnit),
+        units: numUnits,
+        grossWeightPerUnit: gwPerUnit,
         purity: Number(data.purity),
         totalGrossWeight: totalGW,
         fineGold: fg,
@@ -262,9 +264,9 @@ export const GhaatEditModal: React.FC<GhaatEditModalProps> = ({
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Weight/Unit (gm)</label>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Total Weight (gm)</label>
             <Input
-              {...register('grossWeightPerUnit', { required: true, min: 0.001 })}
+              {...register('totalGrossWeight', { required: true, min: 0.001 })}
               type="number"
               step="0.001"
               className="w-full"

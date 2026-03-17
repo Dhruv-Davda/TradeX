@@ -10,14 +10,16 @@ import { StatCard } from '../ui/StatCard';
 import { EmptyState } from '../ui/EmptyState';
 import { PageSkeleton } from '../ui/Skeleton';
 import { GhaatEditModal } from '../ui/GhaatEditModal';
-import { Karigar, GhaatTransaction } from '../../types';
+import { Karigar, GhaatTransaction, GhaatSettlement } from '../../types';
 import { KarigarsService } from '../../services/karigarsService';
 import { GhaatService } from '../../services/ghaatService';
+import { GhaatSettlementService } from '../../services/ghaatSettlementService';
 import { GHAAT_TRANSACTION_COLORS } from '../../lib/constants';
 
 export const Karigars: React.FC = () => {
   const [karigars, setKarigars] = useState<Karigar[]>([]);
   const [transactions, setTransactions] = useState<GhaatTransaction[]>([]);
+  const [settlements, setSettlements] = useState<GhaatSettlement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingKarigar, setEditingKarigar] = useState<Karigar | null>(null);
@@ -32,12 +34,14 @@ export const Karigars: React.FC = () => {
 
   const loadData = async () => {
     try {
-      const [karigarResult, txnResult] = await Promise.all([
+      const [karigarResult, txnResult, settlementResult] = await Promise.all([
         KarigarsService.getKarigars(),
         GhaatService.getTransactions(),
+        GhaatSettlementService.getSettlements(),
       ]);
       if (!karigarResult.error) setKarigars(karigarResult.karigars);
       if (!txnResult.error) setTransactions(txnResult.transactions);
+      if (!settlementResult.error) setSettlements(settlementResult.settlements);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -84,8 +88,22 @@ export const Karigars: React.FC = () => {
       }
     }
 
-    const netBalance = jewelleryReceivedFineGold - goldGivenToKarigar;
-    return { jewelleryReceivedFineGold, goldGivenToKarigar, totalCashPaid, totalPiecesReceived, cashLaborPaid, goldLaborPaid, netBalance, txnCount: txns.length };
+    // Factor in settlements
+    let goldSettled = 0;
+    let cashSettled = 0;
+    for (const s of settlements) {
+      if (s.partyType !== 'karigar' || s.partyId !== karigarId) continue;
+      if (s.direction === 'paying') {
+        goldSettled += s.goldFine;
+        cashSettled += s.cashAmount;
+      } else {
+        goldSettled -= s.goldFine;
+        cashSettled -= s.cashAmount;
+      }
+    }
+
+    const netBalance = jewelleryReceivedFineGold - goldGivenToKarigar - goldSettled;
+    return { jewelleryReceivedFineGold, goldGivenToKarigar, totalCashPaid: totalCashPaid + cashSettled, totalPiecesReceived, cashLaborPaid, goldLaborPaid, netBalance, txnCount: txns.length };
   };
 
   // Total stats

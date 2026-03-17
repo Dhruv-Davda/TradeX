@@ -20,6 +20,7 @@ import { AccountSettings } from './components/settings/AccountSettings';
 import { Ghaat } from './components/ghaat/Ghaat';
 import { GhaatBuy } from './components/ghaat/GhaatBuy';
 import { GhaatSell } from './components/ghaat/GhaatSell';
+import { GhaatSettlement } from './components/ghaat/GhaatSettlement';
 import { Karigars } from './components/karigars/Karigars';
 import { RawGoldLedger } from './components/ghaat/RawGoldLedger';
 import { AuthCallback } from './pages/AuthCallback';
@@ -75,6 +76,7 @@ const AppContent: React.FC = () => {
           <Route path="ghaat" element={<Ghaat />} />
           <Route path="ghaat-buy" element={<GhaatBuy />} />
           <Route path="ghaat-sell" element={<GhaatSell />} />
+          <Route path="ghaat-settlement" element={<GhaatSettlement />} />
           <Route path="karigars" element={<Karigars />} />
           <Route path="raw-gold" element={<RawGoldLedger />} />
           <Route path="migration" element={<DataMigration />} />

@@ -1,25 +1,39 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Gem, ShoppingCart, TrendingUp, Package, ChevronDown, ChevronUp, Scale, Clock, Coins } from 'lucide-react';
+import { Gem, ShoppingCart, TrendingUp, Package, Scale, Clock, Coins, Hammer, Edit, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
+import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
+import { Input } from '../ui/Input';
 import { StatCard } from '../ui/StatCard';
 import { EmptyState } from '../ui/EmptyState';
 import { PageSkeleton } from '../ui/Skeleton';
+import { GhaatEditModal } from '../ui/GhaatEditModal';
 import { GhaatTransaction } from '../../types';
-import { GhaatService, GhaatStockItem, GhaatPnL } from '../../services/ghaatService';
+import { GhaatService, GhaatStockItem } from '../../services/ghaatService';
 import { RawGoldLedgerService } from '../../services/rawGoldLedgerService';
 import { JewelleryCategoryService } from '../../services/jewelleryCategoryService';
-import { DEFAULT_JEWELLERY_CATEGORIES, WEIGHT_BRACKETS, JEWELLERY_CATEGORY_COLORS } from '../../lib/constants';
+import { DEFAULT_JEWELLERY_CATEGORIES, JEWELLERY_CATEGORY_COLORS, GHAAT_TRANSACTION_COLORS, GHAAT_STATUS_COLORS } from '../../lib/constants';
+
+const ITEMS_PER_PAGE = 20;
 
 export const Ghaat: React.FC = () => {
   const navigate = useNavigate();
   const [transactions, setTransactions] = useState<GhaatTransaction[]>([]);
   const [customCategories, setCustomCategories] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [rawGoldBalance, setRawGoldBalance] = useState(0);
+
+  // Filter & pagination state
+  const [filterType, setFilterType] = useState<'all' | 'buy' | 'sell'>('all');
+  const [filterCategory, setFilterCategory] = useState('');
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Edit modal state
+  const [editingTxn, setEditingTxn] = useState<GhaatTransaction | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -45,8 +59,7 @@ export const Ghaat: React.FC = () => {
   const pnl = useMemo(() => GhaatService.calculatePnL(transactions), [transactions]);
 
   const allCategories = useMemo(() => {
-    const cats = [...new Set([...DEFAULT_JEWELLERY_CATEGORIES, ...customCategories])];
-    return cats;
+    return [...new Set([...DEFAULT_JEWELLERY_CATEGORIES, ...customCategories])];
   }, [customCategories]);
 
   // Total stats
@@ -59,38 +72,58 @@ export const Ghaat: React.FC = () => {
   const pendingUnits = pendingTxns.reduce((s, t) => s + t.units, 0);
   const pendingFineGold = pendingTxns.reduce((s, t) => s + t.fineGold, 0);
 
-  // Get stock for a specific category
-  const getStockForCategory = (category: string): GhaatStockItem | undefined => {
-    return stock.find(s => s.category === category);
+  // Stock items with positive values only
+  const stockWithData = useMemo(() => {
+    return stock.filter(s => s.units > 0 || s.totalFineGold > 0);
+  }, [stock]);
+
+  // Filtered & paginated transactions
+  const filteredTransactions = useMemo(() => {
+    let txns = [...transactions];
+
+    if (filterType !== 'all') {
+      txns = txns.filter(t => t.type === filterType);
+    }
+    if (filterCategory) {
+      txns = txns.filter(t => t.category === filterCategory);
+    }
+    if (dateRange.start) {
+      txns = txns.filter(t => {
+        const d = t.transactionDate || t.createdAt.toISOString().split('T')[0];
+        return d >= dateRange.start;
+      });
+    }
+    if (dateRange.end) {
+      txns = txns.filter(t => {
+        const d = t.transactionDate || t.createdAt.toISOString().split('T')[0];
+        return d <= dateRange.end;
+      });
+    }
+
+    return txns.sort((a, b) => {
+      const da = a.transactionDate || a.createdAt.toISOString();
+      const db = b.transactionDate || b.createdAt.toISOString();
+      return db.localeCompare(da);
+    });
+  }, [transactions, filterType, filterCategory, dateRange]);
+
+  const totalPages = Math.ceil(filteredTransactions.length / ITEMS_PER_PAGE);
+  const paginatedTransactions = filteredTransactions.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterType, filterCategory, dateRange]);
+
+  const handleCategoryClick = (category: string) => {
+    setFilterCategory(prev => prev === category ? '' : category);
   };
 
-  // Get weight bracket breakdown for a category
-  const getWeightBrackets = (category: string) => {
-    const categoryTxns = transactions.filter(t => t.category === category);
-
-    // Build a simple inventory: for each bracket, track buy and sell units/weight
-    return WEIGHT_BRACKETS.map(bracket => {
-      let buyUnits = 0, buyFineGold = 0;
-      let sellUnits = 0, sellFineGold = 0;
-
-      for (const txn of categoryTxns) {
-        if (txn.grossWeightPerUnit >= bracket.min && txn.grossWeightPerUnit < bracket.max) {
-          if (txn.type === 'buy') {
-            buyUnits += txn.units;
-            buyFineGold += txn.fineGold;
-          } else {
-            sellUnits += txn.units;
-            sellFineGold += txn.fineGold;
-          }
-        }
-      }
-
-      return {
-        ...bracket,
-        units: buyUnits - sellUnits,
-        fineGold: buyFineGold - sellFineGold,
-      };
-    }).filter(b => b.units > 0 || b.fineGold > 0);
+  const getStockForCategory = (category: string): GhaatStockItem | undefined => {
+    return stock.find(s => s.category === category);
   };
 
   if (isLoading) return <PageSkeleton />;
@@ -110,6 +143,12 @@ export const Ghaat: React.FC = () => {
           </div>
         </div>
         <div className="flex gap-3">
+          <Button onClick={() => navigate('/karigars')} variant="outline">
+            <Hammer className="w-4 h-4 mr-2" /> Karigars
+          </Button>
+          <Button onClick={() => navigate('/ghaat-settlement')} variant="outline">
+            <Scale className="w-4 h-4 mr-2" /> Settlement
+          </Button>
           <Button onClick={() => navigate('/ghaat-buy')} className="bg-gradient-to-r from-amber-500 to-amber-600">
             <ShoppingCart className="w-4 h-4 mr-2" /> Buy from Karigar
           </Button>
@@ -168,7 +207,10 @@ export const Ghaat: React.FC = () => {
 
       {/* Pending with Merchants */}
       {pendingUnits > 0 && (
-        <Card className="p-4 border-amber-500/20">
+        <Card
+          className="p-4 border-amber-500/20 cursor-pointer hover:bg-white/5 transition-colors"
+          onClick={() => navigate('/ghaat-sell')}
+        >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-amber-500/20 rounded-lg flex items-center justify-center">
@@ -179,14 +221,13 @@ export const Ghaat: React.FC = () => {
                 <p className="text-xs text-gray-500">{pendingUnits} pcs | {pendingFineGold.toFixed(3)} gm fine gold currently with merchants</p>
               </div>
             </div>
-            <Button onClick={() => navigate('/ghaat-sell')} variant="outline" size="sm" className="text-amber-400 border-amber-500/30">
+            <Button onClick={(e) => { e.stopPropagation(); navigate('/ghaat-sell'); }} variant="outline" size="sm" className="text-amber-400 border-amber-500/30">
               View
             </Button>
           </div>
         </Card>
       )}
 
-      {/* Category Grid */}
       {transactions.length === 0 ? (
         <EmptyState
           icon={Gem}
@@ -198,80 +239,231 @@ export const Ghaat: React.FC = () => {
           }}
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {allCategories.map((category, index) => {
-            const catStock = getStockForCategory(category);
-            const units = catStock?.units || 0;
-            const fineGold = catStock?.totalFineGold || 0;
-            const isExpanded = expandedCategory === category;
-            const brackets = isExpanded ? getWeightBrackets(category) : [];
-            const color = JEWELLERY_CATEGORY_COLORS[category] || '#6b7280';
-
-            // Skip categories with no stock
-            if (units <= 0 && fineGold <= 0) return null;
-
-            return (
-              <motion.div
-                key={category}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.03 }}
-              >
-                <Card className="p-0 overflow-hidden">
-                  {/* Category Header */}
-                  <button
-                    onClick={() => setExpandedCategory(isExpanded ? null : category)}
-                    className="w-full p-4 flex items-center justify-between hover:bg-white/5 transition-colors"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-                      <div className="text-left">
-                        <h3 className="text-white font-semibold">{category}</h3>
-                        <p className="text-sm text-gray-400">
-                          {units} pcs • {(catStock?.totalGrossWeight || 0).toFixed(3)} gm gross • {fineGold.toFixed(3)} gm fine
-                        </p>
-                      </div>
-                    </div>
-                    {isExpanded ? (
-                      <ChevronUp className="w-5 h-5 text-gray-400" />
-                    ) : (
-                      <ChevronDown className="w-5 h-5 text-gray-400" />
-                    )}
-                  </button>
-
-                  {/* Expanded Weight Brackets */}
-                  {isExpanded && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      className="border-t border-white/10"
-                    >
-                      {brackets.length > 0 ? (
-                        <div className="p-4 space-y-2">
-                          {brackets.map(bracket => (
-                            <div key={bracket.label} className="flex items-center justify-between py-2 px-3 bg-white/5 rounded-lg">
-                              <span className="text-sm text-gray-300">{bracket.label}</span>
-                              <div className="flex items-center space-x-4">
-                                <span className="text-sm text-white font-medium">{bracket.units} pcs</span>
-                                <span className="text-sm text-yellow-400">{bracket.fineGold.toFixed(3)} gm</span>
-                              </div>
+        <>
+          {/* Stock Summary Table */}
+          {stockWithData.length > 0 && (
+            <Card className="p-0 overflow-hidden">
+              <div className="px-4 py-3 border-b border-white/10">
+                <h2 className="text-lg font-semibold text-white">Stock by Category</h2>
+                <p className="text-xs text-gray-500">Tap a category to filter transactions below</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-white/5 border-b border-white/10">
+                      <th className="text-left p-3 text-gray-400 font-medium">Category</th>
+                      <th className="text-right p-3 text-gray-400 font-medium">Units</th>
+                      <th className="text-right p-3 text-gray-400 font-medium">Gross Weight</th>
+                      <th className="text-right p-3 text-gray-400 font-medium">Fine Gold</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stockWithData.map(item => {
+                      const color = JEWELLERY_CATEGORY_COLORS[item.category] || '#6b7280';
+                      const isActive = filterCategory === item.category;
+                      return (
+                        <tr
+                          key={item.category}
+                          onClick={() => handleCategoryClick(item.category)}
+                          className={`border-b border-white/5 cursor-pointer transition-colors ${isActive ? 'bg-white/10' : 'hover:bg-white/5'}`}
+                        >
+                          <td className="p-3">
+                            <div className="flex items-center space-x-2">
+                              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                              <span className="text-white font-medium">{item.category}</span>
                             </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="p-4 text-center text-sm text-gray-500">
-                          No items in weight brackets
-                        </div>
-                      )}
-                    </motion.div>
+                          </td>
+                          <td className="p-3 text-right text-white">{item.units} pcs</td>
+                          <td className="p-3 text-right text-gray-300">{item.totalGrossWeight.toFixed(3)} gm</td>
+                          <td className="p-3 text-right text-yellow-400 font-medium">{item.totalFineGold.toFixed(3)} gm</td>
+                        </tr>
+                      );
+                    })}
+                    {/* Totals row */}
+                    <tr className="bg-white/5 font-semibold">
+                      <td className="p-3 text-gray-300">Total</td>
+                      <td className="p-3 text-right text-white">{totalUnits} pcs</td>
+                      <td className="p-3 text-right text-gray-300">{totalGrossWeight.toFixed(3)} gm</td>
+                      <td className="p-3 text-right text-yellow-400">{totalFineGold.toFixed(3)} gm</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+
+          {/* Transaction History */}
+          <Card className="p-0 overflow-hidden">
+            <div className="px-4 py-3 border-b border-white/10">
+              <h2 className="text-lg font-semibold text-white">Transaction History</h2>
+              <p className="text-xs text-gray-500">{filteredTransactions.length} transaction{filteredTransactions.length !== 1 ? 's' : ''}</p>
+            </div>
+
+            {/* Filters */}
+            <div className="px-4 py-3 border-b border-white/10 space-y-3">
+              {/* Type pills */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {(['all', 'buy', 'sell'] as const).map(type => (
+                  <button
+                    key={type}
+                    onClick={() => setFilterType(type)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                      filterType === type
+                        ? 'bg-white/20 text-white'
+                        : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                    }`}
+                  >
+                    {type === 'all' ? 'All' : type === 'buy' ? 'Buy' : 'Sell'}
+                  </button>
+                ))}
+
+                {/* Category filter */}
+                <select
+                  value={filterCategory}
+                  onChange={e => setFilterCategory(e.target.value)}
+                  className="px-3 py-1.5 rounded-full text-xs font-medium bg-white/5 text-gray-300 border-0 focus:outline-none focus:ring-1 focus:ring-white/20 cursor-pointer"
+                >
+                  <option value="" className="bg-gray-800">All Categories</option>
+                  {allCategories.map(c => (
+                    <option key={c} value={c} className="bg-gray-800">{c}</option>
+                  ))}
+                </select>
+
+                {/* Clear filters */}
+                {(filterType !== 'all' || filterCategory || dateRange.start || dateRange.end) && (
+                  <button
+                    onClick={() => { setFilterType('all'); setFilterCategory(''); setDateRange({ start: '', end: '' }); }}
+                    className="px-3 py-1.5 rounded-full text-xs font-medium text-red-400 bg-red-400/10 hover:bg-red-400/20 transition-colors"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {/* Date range */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <CalendarDays className="w-4 h-4 text-gray-400" />
+                <Input type="date" value={dateRange.start}
+                  onChange={e => setDateRange({ ...dateRange, start: e.target.value })} className="w-auto !py-1.5 text-xs" />
+                <span className="text-gray-500 text-xs">to</span>
+                <Input type="date" value={dateRange.end}
+                  onChange={e => setDateRange({ ...dateRange, end: e.target.value })} className="w-auto !py-1.5 text-xs" />
+              </div>
+            </div>
+
+            {/* Transaction list */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-white/5 border-b border-white/10">
+                    <th className="text-left p-3 text-gray-400 font-medium">Date</th>
+                    <th className="text-left p-3 text-gray-400 font-medium">Type</th>
+                    <th className="text-left p-3 text-gray-400 font-medium">Category</th>
+                    <th className="text-left p-3 text-gray-400 font-medium">Party</th>
+                    <th className="text-right p-3 text-gray-400 font-medium">Units</th>
+                    <th className="text-right p-3 text-gray-400 font-medium">Gross Wt</th>
+                    <th className="text-right p-3 text-gray-400 font-medium">Fine Gold</th>
+                    <th className="text-center p-3 text-gray-400 font-medium"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedTransactions.length === 0 ? (
+                    <tr><td colSpan={8} className="text-center p-8 text-gray-500">No transactions found</td></tr>
+                  ) : (
+                    paginatedTransactions.map(txn => {
+                      const txnColor = GHAAT_TRANSACTION_COLORS[txn.type];
+                      const partyName = txn.type === 'buy'
+                        ? (txn.karigarName || txn.merchantName || '—')
+                        : (txn.merchantName || '—');
+
+                      return (
+                        <tr key={txn.id} className="border-b border-white/5 hover:bg-white/5">
+                          <td className="p-3 text-gray-300 whitespace-nowrap">
+                            {txn.transactionDate
+                              ? format(new Date(txn.transactionDate), 'dd MMM yyyy')
+                              : format(new Date(txn.createdAt), 'dd MMM yyyy')}
+                          </td>
+                          <td className="p-3">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${txnColor.bg} ${txnColor.text} border ${txnColor.border}`}>
+                                {txn.type === 'buy' ? 'Buy' : 'Sell'}
+                              </span>
+                              {txn.type === 'sell' && txn.status && (
+                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${GHAAT_STATUS_COLORS[txn.status].bg} ${GHAAT_STATUS_COLORS[txn.status].text} border ${GHAAT_STATUS_COLORS[txn.status].border}`}>
+                                  {txn.status}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-3 text-white font-medium">{txn.category}</td>
+                          <td className="p-3 text-gray-300">{partyName}</td>
+                          <td className="p-3 text-right text-white">{txn.units}</td>
+                          <td className="p-3 text-right text-gray-300">{txn.totalGrossWeight.toFixed(3)} gm</td>
+                          <td className="p-3 text-right text-yellow-400 font-medium">{txn.fineGold.toFixed(3)} gm</td>
+                          <td className="p-3 text-center">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => { setEditingTxn(txn); setShowEditModal(true); }}
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
-                </Card>
-              </motion.div>
-            );
-          })}
-        </div>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="px-4 py-3 border-t border-white/10 flex items-center justify-between">
+                <span className="text-xs text-gray-500">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </Card>
+        </>
       )}
+
+      {/* Edit Modal */}
+      <GhaatEditModal
+        isOpen={showEditModal}
+        onClose={() => { setShowEditModal(false); setEditingTxn(null); }}
+        transaction={editingTxn}
+        onTransactionUpdated={(updated) => {
+          setTransactions(transactions.map(t => t.id === updated.id ? updated : t));
+          setShowEditModal(false);
+          setEditingTxn(null);
+        }}
+        onTransactionDeleted={(id) => {
+          setTransactions(transactions.filter(t => t.id !== id));
+          setShowEditModal(false);
+          setEditingTxn(null);
+        }}
+        allCategories={allCategories}
+      />
     </div>
   );
 };
