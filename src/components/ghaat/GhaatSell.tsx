@@ -26,7 +26,7 @@ interface GiveToMerchantFormData {
   merchantId: string;
   category: string;
   units: number;
-  grossWeightPerUnit: number;
+  totalGrossWeight: number;
   purity: number;
   transactionDate: string;
   notes?: string;
@@ -139,9 +139,9 @@ export const GhaatSell: React.FC = () => {
   }, [activeTab]);
 
   const units = Number(watchedValues.units) || 0;
-  const weightPerUnit = Number(watchedValues.grossWeightPerUnit) || 0;
+  const totalGrossWeight = Number(watchedValues.totalGrossWeight) || 0;
   const purity = Number(watchedValues.purity) || 0;
-  const totalGrossWeight = units * weightPerUnit;
+  const grossWeightPerUnit = units > 0 ? totalGrossWeight / units : 0;
   const fineGold = totalGrossWeight * purity / 100;
 
   const allCategories = [...new Set([...DEFAULT_JEWELLERY_CATEGORIES, ...customCategories])];
@@ -160,7 +160,7 @@ export const GhaatSell: React.FC = () => {
       id: generateId(),
       category: data.category,
       units: Number(data.units),
-      grossWeightPerUnit: Number(data.grossWeightPerUnit),
+      grossWeightPerUnit,
       purity: Number(data.purity),
       totalGrossWeight,
       fineGold,
@@ -197,7 +197,7 @@ export const GhaatSell: React.FC = () => {
         merchantName: selectedMerchant.name,
         category: data.category,
         units: Number(data.units),
-        grossWeightPerUnit: Number(data.grossWeightPerUnit),
+        grossWeightPerUnit,
         purity: Number(data.purity),
         totalGrossWeight,
         fineGold,
@@ -229,12 +229,12 @@ export const GhaatSell: React.FC = () => {
       let successCount = 0;
       const allItems = [...localPendingItems];
 
-      if (watchedValues.grossWeightPerUnit && watchedValues.category) {
+      if (watchedValues.totalGrossWeight && watchedValues.category) {
         allItems.push({
           id: generateId(),
           category: watchedValues.category,
           units: Number(watchedValues.units),
-          grossWeightPerUnit: Number(watchedValues.grossWeightPerUnit),
+          grossWeightPerUnit,
           purity: Number(watchedValues.purity),
           totalGrossWeight,
           fineGold,
@@ -389,13 +389,13 @@ export const GhaatSell: React.FC = () => {
                   error={errors.units?.message}
                 />
                 <Input
-                  label="Weight per Unit (gm)"
+                  label="Total Weight (gm)"
                   type="number"
                   step="0.001"
                   placeholder="0.000"
                   whiteBorder
-                  {...register('grossWeightPerUnit', { required: 'Weight required', min: { value: 0.001, message: 'Must be > 0' } })}
-                  error={errors.grossWeightPerUnit?.message}
+                  {...register('totalGrossWeight', { required: 'Weight required', min: { value: 0.001, message: 'Must be > 0' } })}
+                  error={errors.totalGrossWeight?.message}
                 />
                 <Input
                   label="Purity %"
@@ -430,16 +430,16 @@ export const GhaatSell: React.FC = () => {
                       <Plus className="w-4 h-4 mr-2" /> Add Another
                     </Button>
                     <Button type="button" onClick={() => setShowPreview(true)} className="flex-1">
-                      <Eye className="w-4 h-4 mr-2" /> Submit All ({localPendingItems.length + (watchedValues.grossWeightPerUnit ? 1 : 0)})
+                      <Eye className="w-4 h-4 mr-2" /> Submit All ({localPendingItems.length + (watchedValues.totalGrossWeight ? 1 : 0)})
                     </Button>
                   </>
                 ) : (
                   <>
-                    <Button type="submit" className="flex-1" disabled={isSubmitting || !watchedValues.merchantId || !watchedValues.category || !watchedValues.grossWeightPerUnit}>
+                    <Button type="submit" className="flex-1" disabled={isSubmitting || !watchedValues.merchantId || !watchedValues.category || !watchedValues.totalGrossWeight}>
                       {isSubmitting ? 'Saving...' : 'Give to Merchant'}
                     </Button>
                     <Button type="button" onClick={handleSubmit(handleAddToPending)} variant="outline" className="px-6"
-                      disabled={!watchedValues.merchantId || !watchedValues.category || !watchedValues.grossWeightPerUnit}>
+                      disabled={!watchedValues.merchantId || !watchedValues.category || !watchedValues.totalGrossWeight}>
                       <Plus className="w-5 h-5 mr-2" /> Add More
                     </Button>
                   </>
@@ -465,7 +465,7 @@ export const GhaatSell: React.FC = () => {
                       <div className="flex items-center space-x-3">
                         <span className="text-gray-500 font-mono">#{index + 1}</span>
                         <span className="text-sm text-white font-medium">{trade.category}</span>
-                        <span className="text-sm text-gray-300">{trade.units} pcs × {trade.grossWeightPerUnit} gm @ {trade.purity}%</span>
+                        <span className="text-sm text-gray-300">{trade.units} pcs | {trade.totalGrossWeight.toFixed(3)} gm @ {trade.purity}%</span>
                       </div>
                       <div className="flex items-center space-x-4 mt-1">
                         <span className="text-xs text-yellow-400">Fine Gold: {trade.fineGold.toFixed(3)} gm</span>
@@ -527,7 +527,7 @@ export const GhaatSell: React.FC = () => {
                           <span className="text-gray-500 font-mono text-xs">#{idx + 1}</span>
                           <span className="text-white text-sm">{item.category}</span>
                           <span className="text-gray-400 text-sm">
-                            {item.units} pcs × {item.grossWeightPerUnit} gm @ {item.purity}%
+                            {item.units} pcs | {item.totalGrossWeight.toFixed(3)} gm @ {item.purity}%
                           </span>
                         </div>
                         <span className="text-yellow-400 font-medium text-sm">
@@ -584,7 +584,7 @@ export const GhaatSell: React.FC = () => {
                   <span className="text-gray-500 font-mono">#{index + 1}</span>
                   <div>
                     <span className="text-sm text-white">{trade.category}</span>
-                    <p className="text-xs text-gray-400">{trade.units} pcs × {trade.grossWeightPerUnit} gm @ {trade.purity}%</p>
+                    <p className="text-xs text-gray-400">{trade.units} pcs | {trade.totalGrossWeight.toFixed(3)} gm @ {trade.purity}%</p>
                   </div>
                 </div>
                 <span className="text-yellow-400 font-medium">{trade.fineGold.toFixed(3)} gm</span>
