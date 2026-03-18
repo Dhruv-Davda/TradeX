@@ -650,6 +650,10 @@ export const GhaatSell: React.FC = () => {
                           <span className="text-white ml-1">{txn.confirmedUnits ?? txn.units} pcs</span>
                         </div>
                         <div>
+                          <span className="text-gray-500">Gross Weight:</span>
+                          <span className="text-white ml-1">{(txn.confirmedGrossWeight ?? txn.totalGrossWeight).toFixed(3)} gm</span>
+                        </div>
+                        <div>
                           <span className="text-gray-500">Fine Gold:</span>
                           <span className="text-yellow-400 ml-1 font-medium">{(txn.confirmedFineGold ?? txn.fineGold).toFixed(3)} gm</span>
                         </div>
