@@ -16,6 +16,7 @@ import { useFinanceData, FinanceItem } from './useFinanceData';
 import { FinanceFormModal } from './FinanceFormModal';
 import { FinanceCategoryChart } from './FinanceCategoryChart';
 import { FinanceMonthlyTrendChart } from './FinanceMonthlyTrendChart';
+import { Toast } from '../ui/Toast';
 import { formatCurrency } from '../../utils/calculations';
 import { StatVariant } from '../../lib/constants';
 
@@ -40,6 +41,7 @@ export const FinancePage: React.FC<FinancePageConfig> = (config) => {
   const [isLoading, setIsLoading] = useState(true);
   const [showFormModal, setShowFormModal] = useState(false);
   const [editingItem, setEditingItem] = useState<FinanceItem | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const {
     filters,
@@ -66,7 +68,7 @@ export const FinancePage: React.FC<FinancePageConfig> = (config) => {
   }, []);
 
   // Form submit handler
-  const handleFormSubmit = async (formData: { category: string; description: string; amount: number; date: string; paymentType: string }) => {
+  const handleFormSubmit = async (formData: { category: string; description: string; amount: number; date: string; paymentType: string }): Promise<boolean> => {
     if (editingItem) {
       const updated: FinanceItem = {
         ...editingItem,
@@ -79,21 +81,25 @@ export const FinancePage: React.FC<FinancePageConfig> = (config) => {
       const { item, error } = await config.updateFn(updated);
       if (!error && item) {
         setItems(prev => prev.map(i => i.id === item.id ? item : i));
+        setEditingItem(null);
+        return true;
       }
-    } else {
-      const newItem = {
-        category: formData.category,
-        description: formData.description,
-        amount: formData.amount,
-        date: new Date(formData.date),
-        paymentType: formData.paymentType,
-      } as Omit<FinanceItem, 'id' | 'createdAt'>;
-      const { item, error } = await config.addFn(newItem);
-      if (!error && item) {
-        setItems(prev => [item, ...prev]);
-      }
+      return false;
     }
-    setEditingItem(null);
+
+    const newItem = {
+      category: formData.category,
+      description: formData.description,
+      amount: formData.amount,
+      date: new Date(formData.date),
+      paymentType: formData.paymentType,
+    } as Omit<FinanceItem, 'id' | 'createdAt'>;
+    const { item, error } = await config.addFn(newItem);
+    if (!error && item) {
+      setItems(prev => [item, ...prev]);
+      return true;
+    }
+    return false;
   };
 
   const handleDelete = async (id: string) => {
@@ -362,6 +368,7 @@ export const FinancePage: React.FC<FinancePageConfig> = (config) => {
         isOpen={showFormModal}
         onClose={() => { setShowFormModal(false); setEditingItem(null); }}
         onSubmit={handleFormSubmit}
+        onAddSuccess={() => setToastMessage(`${config.type === 'expense' ? 'Expense' : 'Income'} added successfully`)}
         editingItem={editingItem}
         categories={config.categories}
         title={editingItem
@@ -369,6 +376,8 @@ export const FinancePage: React.FC<FinancePageConfig> = (config) => {
           : `Add ${config.type === 'expense' ? 'Expense' : 'Income'}`
         }
       />
+
+      <Toast message={toastMessage} onClose={() => setToastMessage(null)} />
     </div>
   );
 };

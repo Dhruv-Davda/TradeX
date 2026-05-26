@@ -18,7 +18,8 @@ interface FormData {
 interface FinanceFormModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: FormData) => Promise<void>;
+  onSubmit: (data: FormData) => Promise<boolean>;
+  onAddSuccess?: () => void;
   editingItem: FinanceItem | null;
   categories: readonly string[];
   title: string;
@@ -28,6 +29,7 @@ export const FinanceFormModal: React.FC<FinanceFormModalProps> = ({
   isOpen,
   onClose,
   onSubmit,
+  onAddSuccess,
   editingItem,
   categories,
   title,
@@ -65,8 +67,22 @@ export const FinanceFormModal: React.FC<FinanceFormModalProps> = ({
   }, [editingItem, isOpen, reset, categories]);
 
   const handleFormSubmit = async (data: FormData) => {
-    await onSubmit(data);
-    onClose();
+    const success = await onSubmit(data);
+    if (!success) return;
+
+    if (editingItem) {
+      onClose();
+      return;
+    }
+
+    reset({
+      category: categories[0] as string,
+      description: '',
+      amount: 0,
+      date: new Date().toISOString().split('T')[0],
+      paymentType: 'cash',
+    });
+    onAddSuccess?.();
   };
 
   return (
