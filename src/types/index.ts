@@ -87,7 +87,6 @@ export interface Stock {
 // Ghaat (Jewellery) types
 export type GhaatTransactionType = 'buy' | 'sell';
 export type LaborType = 'cash' | 'gold';
-export type GhaatSellStatus = 'pending' | 'sold';
 export type GhaatSettlementType = 'gold' | 'cash' | 'mixed';
 
 export interface Karigar {
@@ -125,8 +124,8 @@ export interface GhaatTransaction {
   goldGivenPurity?: number;
   goldGivenFine?: number;
   cashPaid?: number;
-  // Pending/Sold status flow fields
-  status?: GhaatSellStatus;
+  // Legacy fields from removed pending/sold flow — still read for backward compat
+  status?: 'pending' | 'sold';
   groupId?: string;
   ratePer10gm?: number;
   totalAmount?: number;
@@ -140,17 +139,6 @@ export interface GhaatTransaction {
   confirmedGrossWeight?: number;
   confirmedFineGold?: number;
   duesShortfall?: number;
-}
-
-export interface PendingGhaatSaleGroup {
-  groupId: string;
-  merchantId: string;
-  merchantName: string;
-  dateGiven: string;
-  items: GhaatTransaction[];
-  totalUnits: number;
-  totalGrossWeight: number;
-  totalFineGold: number;
 }
 
 // Raw Gold Ledger types

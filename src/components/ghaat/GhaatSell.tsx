@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useForm } from 'react-hook-form';
-import { TrendingUp, Plus, Trash2, Eye, Clock, CheckCircle, Package, History, Edit } from 'lucide-react';
+import { TrendingUp, Plus, Trash2, Eye, Package, History, Edit } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -9,18 +9,16 @@ import { Select } from '../ui/Select';
 import { Modal } from '../ui/Modal';
 import { PageSkeleton } from '../ui/Skeleton';
 import { EmptyState } from '../ui/EmptyState';
-import { GhaatConfirmSaleModal } from '../ui/GhaatConfirmSaleModal';
 import { GhaatEditModal } from '../ui/GhaatEditModal';
-import { Merchant, GhaatTransaction, PendingGhaatSaleGroup } from '../../types';
+import { Merchant, GhaatTransaction } from '../../types';
 import { format } from 'date-fns';
 import { generateId } from '../../utils/calculations';
 import { GhaatService } from '../../services/ghaatService';
 import { MerchantsService } from '../../services/merchantsService';
 import { JewelleryCategoryService } from '../../services/jewelleryCategoryService';
-import { DEFAULT_JEWELLERY_CATEGORIES, GHAAT_STATUS_COLORS } from '../../lib/constants';
-import { formatCurrency } from '../../utils/calculations';
+import { DEFAULT_JEWELLERY_CATEGORIES } from '../../lib/constants';
 
-type SellTab = 'give' | 'pending' | 'history';
+type SellTab = 'give' | 'history';
 
 interface GiveToMerchantFormData {
   merchantId: string;
@@ -56,15 +54,9 @@ export const GhaatSell: React.FC = () => {
   const [showAddMerchant, setShowAddMerchant] = useState(false);
   const [newMerchant, setNewMerchant] = useState({ name: '', phone: '', email: '', olderDues: '' });
 
-  // "Pending Sales" tab state
-  const [pendingSaleGroups, setPendingSaleGroups] = useState<PendingGhaatSaleGroup[]>([]);
-  const [selectedGroup, setSelectedGroup] = useState<PendingGhaatSaleGroup | null>(null);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [pendingLoading, setPendingLoading] = useState(false);
-
-  // "Sold History" tab state
-  const [soldTransactions, setSoldTransactions] = useState<GhaatTransaction[]>([]);
-  const [soldLoading, setSoldLoading] = useState(false);
+  // "Sell History" tab state
+  const [sellTransactions, setSellTransactions] = useState<GhaatTransaction[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [editingTxn, setEditingTxn] = useState<GhaatTransaction | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
 
@@ -96,45 +88,31 @@ export const GhaatSell: React.FC = () => {
     loadData();
   }, []);
 
-  const loadPendingSales = async () => {
-    setPendingLoading(true);
-    try {
-      const { groups, error } = await GhaatService.getPendingSales();
-      if (!error) setPendingSaleGroups(groups);
-    } catch (error) {
-      console.error('Error loading pending sales:', error);
-    } finally {
-      setPendingLoading(false);
-    }
-  };
-
-  const loadSoldHistory = async () => {
-    setSoldLoading(true);
+  const loadSellHistory = async () => {
+    setHistoryLoading(true);
     try {
       const { transactions: allTxns, error } = await GhaatService.getTransactions();
       if (!error) {
-        setSoldTransactions(
+        setSellTransactions(
           allTxns
-            .filter(t => t.type === 'sell' && t.status === 'sold')
+            .filter(t => t.type === 'sell')
             .sort((a, b) => {
-              const da = a.confirmedDate || a.transactionDate || '';
-              const db = b.confirmedDate || b.transactionDate || '';
+              const da = a.transactionDate || '';
+              const db = b.transactionDate || '';
               return db.localeCompare(da);
             })
         );
       }
     } catch (error) {
-      console.error('Error loading sold history:', error);
+      console.error('Error loading sell history:', error);
     } finally {
-      setSoldLoading(false);
+      setHistoryLoading(false);
     }
   };
 
   useEffect(() => {
-    if (activeTab === 'pending') {
-      loadPendingSales();
-    } else if (activeTab === 'history') {
-      loadSoldHistory();
+    if (activeTab === 'history') {
+      loadSellHistory();
     }
   }, [activeTab]);
 
@@ -183,7 +161,6 @@ export const GhaatSell: React.FC = () => {
       return;
     }
 
-    // Single item submission
     const selectedMerchant = merchants.find(m => m.id === data.merchantId);
     if (!selectedMerchant) return;
 
@@ -191,8 +168,6 @@ export const GhaatSell: React.FC = () => {
     try {
       const { error } = await GhaatService.addTransaction({
         type: 'sell',
-        status: 'pending',
-        groupId: generateId(),
         merchantId: data.merchantId,
         merchantName: selectedMerchant.name,
         category: data.category,
@@ -211,7 +186,7 @@ export const GhaatSell: React.FC = () => {
       }
 
       reset({ purity: 95, units: 1, transactionDate: new Date().toISOString().split('T')[0] });
-      alert('Jewellery given to merchant (pending)!');
+      alert(`Sold! ${fineGold.toFixed(3)} gm fine gold added to ${selectedMerchant.name}'s dues.`);
     } catch {
       alert('Unexpected error');
     } finally {
@@ -225,8 +200,8 @@ export const GhaatSell: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      const groupId = generateId();
       let successCount = 0;
+      let totalFineGoldGiven = 0;
       const allItems = [...localPendingItems];
 
       if (watchedValues.totalGrossWeight && watchedValues.category) {
@@ -245,8 +220,6 @@ export const GhaatSell: React.FC = () => {
       for (const item of allItems) {
         const { error } = await GhaatService.addTransaction({
           type: 'sell',
-          status: 'pending',
-          groupId,
           merchantId: watchedValues.merchantId,
           merchantName: selectedMerchant.name,
           category: item.category,
@@ -258,11 +231,14 @@ export const GhaatSell: React.FC = () => {
           transactionDate: watchedValues.transactionDate,
           notes: item.notes,
         });
-        if (!error) successCount++;
+        if (!error) {
+          successCount++;
+          totalFineGoldGiven += item.fineGold;
+        }
       }
 
       if (successCount === allItems.length) {
-        alert(`${successCount} item${successCount > 1 ? 's' : ''} given to merchant (pending)!`);
+        alert(`${successCount} item${successCount > 1 ? 's' : ''} sold — ${totalFineGoldGiven.toFixed(3)} gm fine gold added to ${selectedMerchant.name}'s dues.`);
         setLocalPendingItems([]);
         reset({ purity: 95, units: 1, transactionDate: new Date().toISOString().split('T')[0] });
         setShowPreview(false);
@@ -304,7 +280,7 @@ export const GhaatSell: React.FC = () => {
         </div>
         <div>
           <h1 className="text-2xl font-bold text-white">Ghaat Sell</h1>
-          <p className="text-gray-400">Give jewellery to merchants & manage pending sales</p>
+          <p className="text-gray-400">Sell jewellery to merchants — fine gold goes to their dues</p>
         </div>
       </motion.div>
 
@@ -316,20 +292,7 @@ export const GhaatSell: React.FC = () => {
             activeTab === 'give' ? 'bg-emerald-500 text-white' : 'text-gray-400 hover:text-white'
           }`}
         >
-          <Package className="w-4 h-4" /> Give to Merchant
-        </button>
-        <button
-          onClick={() => setActiveTab('pending')}
-          className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
-            activeTab === 'pending' ? 'bg-emerald-500 text-white' : 'text-gray-400 hover:text-white'
-          }`}
-        >
-          <Clock className="w-4 h-4" /> Pending Sales
-          {pendingSaleGroups.length > 0 && (
-            <span className="bg-amber-500 text-white text-xs rounded-full px-1.5 py-0.5 ml-1">
-              {pendingSaleGroups.length}
-            </span>
-          )}
+          <Package className="w-4 h-4" /> Sell to Merchant
         </button>
         <button
           onClick={() => setActiveTab('history')}
@@ -337,11 +300,11 @@ export const GhaatSell: React.FC = () => {
             activeTab === 'history' ? 'bg-emerald-500 text-white' : 'text-gray-400 hover:text-white'
           }`}
         >
-          <History className="w-4 h-4" /> Sold History
+          <History className="w-4 h-4" /> Sell History
         </button>
       </div>
 
-      {/* Tab 1: Give to Merchant */}
+      {/* Tab 1: Sell to Merchant */}
       {activeTab === 'give' && (
         <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3 }}>
           <Card className="p-6">
@@ -415,7 +378,7 @@ export const GhaatSell: React.FC = () => {
                     <span className="text-white font-medium">{totalGrossWeight.toFixed(3)} gm</span>
                   </div>
                   <div className="flex justify-between items-center text-sm pt-2 border-t border-gray-600">
-                    <span className="text-gray-300 font-medium">Fine Gold Charged:</span>
+                    <span className="text-gray-300 font-medium">Fine Gold to Merchant Dues:</span>
                     <span className="text-yellow-400 font-bold">{fineGold.toFixed(3)} gm</span>
                   </div>
                 </motion.div>
@@ -436,7 +399,7 @@ export const GhaatSell: React.FC = () => {
                 ) : (
                   <>
                     <Button type="submit" className="flex-1" disabled={isSubmitting || !watchedValues.merchantId || !watchedValues.category || !watchedValues.totalGrossWeight}>
-                      {isSubmitting ? 'Saving...' : 'Give to Merchant'}
+                      {isSubmitting ? 'Saving...' : 'Sell to Merchant'}
                     </Button>
                     <Button type="button" onClick={handleSubmit(handleAddToPending)} variant="outline" className="px-6"
                       disabled={!watchedValues.merchantId || !watchedValues.category || !watchedValues.totalGrossWeight}>
@@ -452,7 +415,7 @@ export const GhaatSell: React.FC = () => {
           {localPendingItems.length > 0 && (
             <Card className="p-6 mt-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-white">Items to Give ({localPendingItems.length})</h3>
+                <h3 className="text-lg font-semibold text-white">Items to Sell ({localPendingItems.length})</h3>
                 <Button variant="ghost" size="sm" onClick={() => setLocalPendingItems([])} className="text-red-400 hover:text-red-300">
                   Clear All
                 </Button>
@@ -483,67 +446,6 @@ export const GhaatSell: React.FC = () => {
                 <span className="text-yellow-400 font-bold text-xl">{localPendingItems.reduce((s, t) => s + t.fineGold, 0).toFixed(3)} gm</span>
               </div>
             </Card>
-          )}
-        </motion.div>
-      )}
-
-      {/* Tab 2: Pending Sales */}
-      {activeTab === 'pending' && (
-        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3 }}>
-          {pendingLoading ? (
-            <PageSkeleton cards={2} />
-          ) : pendingSaleGroups.length === 0 ? (
-            <EmptyState
-              icon={Clock}
-              title="No Pending Sales"
-              description="Give jewellery to a merchant to create pending sales."
-              action={{ label: 'Give to Merchant', onClick: () => setActiveTab('give') }}
-            />
-          ) : (
-            <div className="space-y-4">
-              {pendingSaleGroups.map((group) => (
-                <Card key={group.groupId} className="p-0 overflow-hidden">
-                  {/* Group Header */}
-                  <div className="p-4 bg-gray-800/50 flex items-center justify-between">
-                    <div>
-                      <h3 className="text-white font-semibold">{group.merchantName}</h3>
-                      <p className="text-sm text-gray-400">
-                        Given on {group.dateGiven} | {group.items.length} item{group.items.length > 1 ? 's' : ''}
-                      </p>
-                    </div>
-                    <Button
-                      onClick={() => { setSelectedGroup(group); setShowConfirmModal(true); }}
-                      className="bg-gradient-to-r from-emerald-500 to-emerald-600"
-                      size="sm"
-                    >
-                      <CheckCircle className="w-4 h-4 mr-1" /> Confirm Sale
-                    </Button>
-                  </div>
-                  {/* Line items */}
-                  <div className="divide-y divide-gray-700/50">
-                    {group.items.map((item, idx) => (
-                      <div key={item.id} className="p-3 px-4 flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          <span className="text-gray-500 font-mono text-xs">#{idx + 1}</span>
-                          <span className="text-white text-sm">{item.category}</span>
-                          <span className="text-gray-400 text-sm">
-                            {item.units} pcs | {item.totalGrossWeight.toFixed(3)} gm @ {item.purity}%
-                          </span>
-                        </div>
-                        <span className="text-yellow-400 font-medium text-sm">
-                          {item.fineGold.toFixed(3)} gm
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  {/* Group Footer */}
-                  <div className="p-3 px-4 bg-gray-800/30 flex justify-between items-center border-t border-gray-700/50">
-                    <span className="text-gray-300 font-medium text-sm">Total Fine Gold:</span>
-                    <span className="text-yellow-400 font-bold">{group.totalFineGold.toFixed(3)} gm</span>
-                  </div>
-                </Card>
-              ))}
-            </div>
           )}
         </motion.div>
       )}
@@ -598,7 +500,7 @@ export const GhaatSell: React.FC = () => {
               <span className="text-white font-bold">{localPendingItems.length}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-gray-300">Total Fine Gold:</span>
+              <span className="text-gray-300">Total Fine Gold to Dues:</span>
               <span className="text-yellow-400 font-bold text-xl">{localPendingItems.reduce((s, t) => s + t.fineGold, 0).toFixed(3)} gm</span>
             </div>
           </div>
@@ -606,75 +508,54 @@ export const GhaatSell: React.FC = () => {
           <div className="flex space-x-3 pt-4">
             <Button variant="outline" onClick={() => setShowPreview(false)} className="flex-1">Back to Edit</Button>
             <Button onClick={handleSubmitAll} disabled={isSubmitting} className="flex-1 bg-gradient-to-r from-emerald-500 to-emerald-600">
-              {isSubmitting ? 'Submitting...' : 'Give to Merchant (Pending)'}
+              {isSubmitting ? 'Submitting...' : 'Sell to Merchant'}
             </Button>
           </div>
         </div>
       </Modal>
 
-      {/* Tab 3: Sold History */}
+      {/* Tab 2: Sell History */}
       {activeTab === 'history' && (
         <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3 }}>
-          {soldLoading ? (
+          {historyLoading ? (
             <PageSkeleton cards={3} />
-          ) : soldTransactions.length === 0 ? (
+          ) : sellTransactions.length === 0 ? (
             <EmptyState
               icon={History}
-              title="No Sold Transactions"
-              description="Confirmed sales will appear here."
+              title="No Sells Yet"
+              description="Items you sell to merchants will appear here."
             />
           ) : (
             <div className="space-y-3">
-              {soldTransactions.map(txn => (
+              {sellTransactions.map(txn => (
                 <Card key={txn.id} className="p-4">
                   <div className="flex items-start justify-between">
                     <div className="flex-1 space-y-2">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-white font-semibold">{txn.category}</span>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${GHAAT_STATUS_COLORS.sold.bg} ${GHAAT_STATUS_COLORS.sold.text} border ${GHAAT_STATUS_COLORS.sold.border}`}>
-                          Sold
-                        </span>
                         {txn.merchantName && (
                           <span className="text-sm text-gray-400">— {txn.merchantName}</span>
                         )}
                       </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1 text-sm">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-sm">
                         <div>
-                          <span className="text-gray-500">Confirmed:</span>
+                          <span className="text-gray-500">Date:</span>
                           <span className="text-gray-300 ml-1">
-                            {txn.confirmedDate ? format(new Date(txn.confirmedDate), 'dd MMM yyyy') : '—'}
+                            {txn.transactionDate ? format(new Date(txn.transactionDate), 'dd MMM yyyy') : '—'}
                           </span>
                         </div>
                         <div>
                           <span className="text-gray-500">Units:</span>
-                          <span className="text-white ml-1">{txn.confirmedUnits ?? txn.units} pcs</span>
+                          <span className="text-white ml-1">{txn.units} pcs</span>
                         </div>
                         <div>
                           <span className="text-gray-500">Gross Weight:</span>
-                          <span className="text-white ml-1">{(txn.confirmedGrossWeight ?? txn.totalGrossWeight).toFixed(3)} gm</span>
+                          <span className="text-white ml-1">{txn.totalGrossWeight.toFixed(3)} gm</span>
                         </div>
                         <div>
                           <span className="text-gray-500">Fine Gold:</span>
-                          <span className="text-yellow-400 ml-1 font-medium">{(txn.confirmedFineGold ?? txn.fineGold).toFixed(3)} gm</span>
+                          <span className="text-yellow-400 ml-1 font-medium">{txn.fineGold.toFixed(3)} gm</span>
                         </div>
-                        {txn.ratePer10gm && (
-                          <div>
-                            <span className="text-gray-500">Rate/10gm:</span>
-                            <span className="text-gray-300 ml-1">{formatCurrency(txn.ratePer10gm)}</span>
-                          </div>
-                        )}
-                        {txn.totalAmount && (
-                          <div>
-                            <span className="text-gray-500">Total:</span>
-                            <span className="text-green-400 ml-1 font-medium">{formatCurrency(txn.totalAmount)}</span>
-                          </div>
-                        )}
-                        {txn.settlementType && (
-                          <div>
-                            <span className="text-gray-500">Settlement:</span>
-                            <span className="text-gray-300 ml-1 capitalize">{txn.settlementType}</span>
-                          </div>
-                        )}
                       </div>
                     </div>
                     <Button
@@ -692,30 +573,18 @@ export const GhaatSell: React.FC = () => {
         </motion.div>
       )}
 
-      {/* Confirm Sale Modal */}
-      <GhaatConfirmSaleModal
-        isOpen={showConfirmModal}
-        onClose={() => { setShowConfirmModal(false); setSelectedGroup(null); }}
-        group={selectedGroup}
-        onSaleConfirmed={() => {
-          setShowConfirmModal(false);
-          setSelectedGroup(null);
-          loadPendingSales();
-        }}
-      />
-
-      {/* Edit Modal (read-only for sold) */}
+      {/* Edit Modal */}
       <GhaatEditModal
         isOpen={showEditModal}
         onClose={() => { setShowEditModal(false); setEditingTxn(null); }}
         transaction={editingTxn}
         onTransactionUpdated={(updated) => {
-          setSoldTransactions(soldTransactions.map(t => t.id === updated.id ? updated : t));
+          setSellTransactions(sellTransactions.map(t => t.id === updated.id ? updated : t));
           setShowEditModal(false);
           setEditingTxn(null);
         }}
         onTransactionDeleted={(id) => {
-          setSoldTransactions(soldTransactions.filter(t => t.id !== id));
+          setSellTransactions(sellTransactions.filter(t => t.id !== id));
           setShowEditModal(false);
           setEditingTxn(null);
         }}

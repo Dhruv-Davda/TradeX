@@ -23,7 +23,7 @@ interface DatabaseGhaatSettlement {
 }
 
 export interface MerchantGhaatBalance {
-  fineGoldPending: number;
+  fineGoldDue: number;
   cashDue: number;
   cashSettled: number;
   goldSettled: number;
@@ -178,21 +178,17 @@ export class GhaatSettlementService {
     transactions: GhaatTransaction[],
     settlements: GhaatSettlement[]
   ): MerchantGhaatBalance {
-    // Cash due from confirmed sale shortfalls
+    let fineGoldGiven = 0;
     let cashDue = 0;
-    let fineGoldPending = 0;
 
     for (const t of transactions) {
       if (t.merchantId !== merchantId) continue;
-      if (t.type === 'sell' && t.status === 'sold' && t.duesShortfall) {
-        cashDue += t.duesShortfall;
-      }
-      if (t.type === 'sell' && t.status === 'pending') {
-        fineGoldPending += t.fineGold;
-      }
+      if (t.type !== 'sell') continue;
+      fineGoldGiven += t.fineGold;
+      // Legacy confirmed-sale cash shortfalls still count as cash dues
+      if (t.duesShortfall) cashDue += t.duesShortfall;
     }
 
-    // Settlements with this merchant
     let cashSettled = 0;
     let goldSettled = 0;
 
@@ -202,14 +198,13 @@ export class GhaatSettlementService {
         cashSettled += s.cashAmount;
         goldSettled += s.goldFine;
       } else {
-        // paying = advance to merchant, increases what they owe
         cashSettled -= s.cashAmount;
         goldSettled -= s.goldFine;
       }
     }
 
     return {
-      fineGoldPending,
+      fineGoldDue: fineGoldGiven - goldSettled,
       cashDue,
       cashSettled,
       goldSettled,

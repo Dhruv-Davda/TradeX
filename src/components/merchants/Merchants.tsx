@@ -517,13 +517,17 @@ export const Merchants: React.FC = () => {
                   </div>
 
                   {/* Jewellery Dues */}
-                  {(jewelleryDues.fineGoldPending > 0 || jewelleryDues.netCashDue > 0) && (
+                  {(jewelleryDues.fineGoldDue !== 0 || jewelleryDues.netCashDue > 0) && (
                     <div className="space-y-1.5 mb-4 p-2.5 bg-amber-500/5 border border-amber-500/15 rounded-lg">
                       <span className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Jewellery</span>
-                      {jewelleryDues.fineGoldPending > 0 && (
+                      {jewelleryDues.fineGoldDue !== 0 && (
                         <div className="flex justify-between items-center text-sm">
-                          <span className="text-gray-400">Pending Gold:</span>
-                          <span className="text-yellow-400 font-medium">{jewelleryDues.fineGoldPending.toFixed(3)} gm</span>
+                          <span className="text-gray-400">Fine Gold Due:</span>
+                          <span className={`font-medium ${jewelleryDues.fineGoldDue > 0 ? 'text-yellow-400' : 'text-emerald-400'}`}>
+                            {jewelleryDues.fineGoldDue > 0
+                              ? `${jewelleryDues.fineGoldDue.toFixed(3)} gm`
+                              : `${Math.abs(jewelleryDues.fineGoldDue).toFixed(3)} gm (advance)`}
+                          </span>
                         </div>
                       )}
                       {jewelleryDues.netCashDue > 0 && (
@@ -680,14 +684,18 @@ export const Merchants: React.FC = () => {
               {/* Jewellery Dues in Details Modal */}
               {(() => {
                 const jd = GhaatSettlementService.calculateMerchantGhaatBalance(selectedMerchant.id, ghaatTransactions, ghaatSettlements);
-                if (jd.fineGoldPending <= 0 && jd.netCashDue <= 0) return null;
+                if (jd.fineGoldDue === 0 && jd.netCashDue <= 0) return null;
                 return (
                   <div className="pt-3 border-t border-gray-700 space-y-2">
                     <span className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Jewellery Dues</span>
-                    {jd.fineGoldPending > 0 && (
+                    {jd.fineGoldDue !== 0 && (
                       <div className="flex justify-between items-center">
-                        <span className="text-gray-400">Pending Gold:</span>
-                        <span className="text-yellow-400 font-medium">{jd.fineGoldPending.toFixed(3)} gm fine</span>
+                        <span className="text-gray-400">Fine Gold Due:</span>
+                        <span className={`font-medium ${jd.fineGoldDue > 0 ? 'text-yellow-400' : 'text-emerald-400'}`}>
+                          {jd.fineGoldDue > 0
+                            ? `${jd.fineGoldDue.toFixed(3)} gm fine`
+                            : `${Math.abs(jd.fineGoldDue).toFixed(3)} gm fine (advance)`}
+                        </span>
                       </div>
                     )}
                     {jd.netCashDue > 0 && (

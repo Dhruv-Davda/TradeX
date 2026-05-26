@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Gem, ShoppingCart, TrendingUp, Package, Scale, Clock, Coins, Hammer, Edit, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Gem, ShoppingCart, TrendingUp, Package, Scale, Coins, Hammer, Edit, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../ui/Card';
@@ -14,7 +14,7 @@ import { GhaatTransaction } from '../../types';
 import { GhaatService, GhaatStockItem } from '../../services/ghaatService';
 import { RawGoldLedgerService } from '../../services/rawGoldLedgerService';
 import { JewelleryCategoryService } from '../../services/jewelleryCategoryService';
-import { DEFAULT_JEWELLERY_CATEGORIES, JEWELLERY_CATEGORY_COLORS, GHAAT_TRANSACTION_COLORS, GHAAT_STATUS_COLORS } from '../../lib/constants';
+import { DEFAULT_JEWELLERY_CATEGORIES, JEWELLERY_CATEGORY_COLORS, GHAAT_TRANSACTION_COLORS } from '../../lib/constants';
 
 const ITEMS_PER_PAGE = 20;
 
@@ -66,11 +66,6 @@ export const Ghaat: React.FC = () => {
   const totalUnits = stock.reduce((s, item) => s + item.units, 0);
   const totalGrossWeight = stock.reduce((s, item) => s + item.totalGrossWeight, 0);
   const totalFineGold = stock.reduce((s, item) => s + item.totalFineGold, 0);
-
-  // Pending items summary
-  const pendingTxns = transactions.filter(t => t.type === 'sell' && t.status === 'pending');
-  const pendingUnits = pendingTxns.reduce((s, t) => s + t.units, 0);
-  const pendingFineGold = pendingTxns.reduce((s, t) => s + t.fineGold, 0);
 
   // Stock items with positive values only
   const stockWithData = useMemo(() => {
@@ -204,29 +199,6 @@ export const Ghaat: React.FC = () => {
           />
         </div>
       </div>
-
-      {/* Pending with Merchants */}
-      {pendingUnits > 0 && (
-        <Card
-          className="p-4 border-amber-500/20 cursor-pointer hover:bg-white/5 transition-colors"
-          onClick={() => navigate('/ghaat-sell')}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-amber-500/20 rounded-lg flex items-center justify-center">
-                <Clock className="w-4 h-4 text-amber-400" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-amber-400">Pending with Merchants</h3>
-                <p className="text-xs text-gray-500">{pendingUnits} pcs | {pendingFineGold.toFixed(3)} gm fine gold currently with merchants</p>
-              </div>
-            </div>
-            <Button onClick={(e) => { e.stopPropagation(); navigate('/ghaat-sell'); }} variant="outline" size="sm" className="text-amber-400 border-amber-500/30">
-              View
-            </Button>
-          </div>
-        </Card>
-      )}
 
       {transactions.length === 0 ? (
         <EmptyState
@@ -384,16 +356,9 @@ export const Ghaat: React.FC = () => {
                               : format(new Date(txn.createdAt), 'dd MMM yyyy')}
                           </td>
                           <td className="p-3">
-                            <div className="flex items-center gap-1.5">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${txnColor.bg} ${txnColor.text} border ${txnColor.border}`}>
-                                {txn.type === 'buy' ? 'Buy' : 'Sell'}
-                              </span>
-                              {txn.type === 'sell' && txn.status && (
-                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${GHAAT_STATUS_COLORS[txn.status].bg} ${GHAAT_STATUS_COLORS[txn.status].text} border ${GHAAT_STATUS_COLORS[txn.status].border}`}>
-                                  {txn.status}
-                                </span>
-                              )}
-                            </div>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${txnColor.bg} ${txnColor.text} border ${txnColor.border}`}>
+                              {txn.type === 'buy' ? 'Buy' : 'Sell'}
+                            </span>
                           </td>
                           <td className="p-3 text-white font-medium">{txn.category}</td>
                           <td className="p-3 text-gray-300">{partyName}</td>

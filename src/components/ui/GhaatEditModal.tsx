@@ -7,8 +7,7 @@ import { Button } from './Button';
 import { GhaatTransaction } from '../../types';
 import { GhaatService } from '../../services/ghaatService';
 import { RawGoldLedgerService } from '../../services/rawGoldLedgerService';
-import { DEFAULT_JEWELLERY_CATEGORIES, GHAAT_STATUS_COLORS } from '../../lib/constants';
-import { formatCurrency } from '../../utils/calculations';
+import { DEFAULT_JEWELLERY_CATEGORIES } from '../../lib/constants';
 
 interface EditGhaatFormData {
   category: string;
@@ -17,7 +16,6 @@ interface EditGhaatFormData {
   purity: number;
   laborType: string;
   laborAmount: number;
-  amountReceived: number;
   date: string;
   notes: string;
   goldGivenWeight: number;
@@ -55,7 +53,6 @@ export const GhaatEditModal: React.FC<GhaatEditModalProps> = ({
       setValue('purity', transaction.purity);
       setValue('laborType', transaction.laborType || 'cash');
       setValue('laborAmount', transaction.laborAmount || 0);
-      setValue('amountReceived', transaction.amountReceived || 0);
       setValue('notes', transaction.notes || '');
       setValue('goldGivenWeight', transaction.goldGivenWeight || 0);
       setValue('goldGivenPurity', transaction.goldGivenPurity || 0);
@@ -67,9 +64,6 @@ export const GhaatEditModal: React.FC<GhaatEditModalProps> = ({
       setValue('date', txnDate);
     }
   }, [transaction, isOpen, setValue]);
-
-  const isSold = transaction?.type === 'sell' && transaction?.status === 'sold';
-  const isPending = transaction?.type === 'sell' && transaction?.status === 'pending';
 
   // Auto-calculate display values
   const units = Number(watchedValues.units) || 0;
@@ -104,7 +98,6 @@ export const GhaatEditModal: React.FC<GhaatEditModalProps> = ({
         fineGold: fg,
         laborType: data.laborType as 'cash' | 'gold',
         laborAmount: Number(data.laborAmount) || 0,
-        amountReceived: transaction.type === 'sell' ? Number(data.amountReceived) || 0 : undefined,
         notes: data.notes || undefined,
         transactionDate: data.date,
         goldGivenWeight: transaction.type === 'buy' ? (goldGW || undefined) : undefined,
@@ -168,69 +161,8 @@ export const GhaatEditModal: React.FC<GhaatEditModalProps> = ({
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title={`Edit ${transaction?.type === 'buy' ? 'Buy' : 'Sell'} Transaction`}>
-      {/* Status Badge */}
-      {transaction?.type === 'sell' && transaction.status && (
-        <div className="mb-4">
-          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${GHAAT_STATUS_COLORS[transaction.status].bg} ${GHAAT_STATUS_COLORS[transaction.status].text} border ${GHAAT_STATUS_COLORS[transaction.status].border}`}>
-            {transaction.status === 'pending' ? 'Pending with Merchant' : 'Sold & Confirmed'}
-          </span>
-          {transaction.merchantName && (
-            <span className="ml-2 text-sm text-gray-400">— {transaction.merchantName}</span>
-          )}
-        </div>
-      )}
-
-      {/* Sold Transaction — Read-only Confirmation Details */}
-      {isSold && (
-        <div className="mb-4 p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-lg space-y-3">
-          <h4 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">Confirmation Details</h4>
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <span className="text-gray-500 block">Rate / 10gm</span>
-              <span className="text-white font-medium">{formatCurrency(transaction?.ratePer10gm || 0)}</span>
-            </div>
-            <div>
-              <span className="text-gray-500 block">Total Amount</span>
-              <span className="text-white font-medium">{formatCurrency(transaction?.totalAmount || 0)}</span>
-            </div>
-            <div>
-              <span className="text-gray-500 block">Confirmed Units</span>
-              <span className="text-white font-medium">{transaction?.confirmedUnits} pcs</span>
-            </div>
-            <div>
-              <span className="text-gray-500 block">Confirmed Fine Gold</span>
-              <span className="text-yellow-400 font-medium">{transaction?.confirmedFineGold?.toFixed(3)} gm</span>
-            </div>
-            <div>
-              <span className="text-gray-500 block">Settlement</span>
-              <span className="text-white font-medium capitalize">{transaction?.settlementType || '-'}</span>
-            </div>
-            <div>
-              <span className="text-gray-500 block">Confirmed Date</span>
-              <span className="text-white font-medium">{transaction?.confirmedDate || '-'}</span>
-            </div>
-            {(transaction?.settlementType === 'gold' || transaction?.settlementType === 'mixed') && (
-              <div>
-                <span className="text-gray-500 block">Gold Returned</span>
-                <span className="text-yellow-400 font-medium">
-                  {transaction?.goldReturnedWeight?.toFixed(3)} gm @ {transaction?.goldReturnedPurity}% = {transaction?.goldReturnedFine?.toFixed(3)} gm fine
-                </span>
-              </div>
-            )}
-            {(transaction?.settlementType === 'cash' || transaction?.settlementType === 'mixed') && (
-              <div>
-                <span className="text-gray-500 block">Cash Received</span>
-                <span className="text-green-400 font-medium">{formatCurrency(transaction?.cashReceived || 0)}</span>
-              </div>
-            )}
-            {(transaction?.duesShortfall || 0) > 0 && (
-              <div>
-                <span className="text-gray-500 block">Dues Shortfall</span>
-                <span className="text-red-400 font-medium">{formatCurrency(transaction?.duesShortfall || 0)}</span>
-              </div>
-            )}
-          </div>
-        </div>
+      {transaction?.type === 'sell' && transaction.merchantName && (
+        <div className="mb-4 text-sm text-gray-400">— {transaction.merchantName}</div>
       )}
 
       <form onSubmit={handleSubmit(handleUpdate)} className="space-y-4">
@@ -365,19 +297,6 @@ export const GhaatEditModal: React.FC<GhaatEditModalProps> = ({
           </div>
         )}
 
-        {/* Amount Received (legacy sell only — no status) */}
-        {transaction?.type === 'sell' && !transaction.status && (
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Amount Received (₹)</label>
-            <Input
-              {...register('amountReceived')}
-              type="number"
-              step="0.01"
-              className="w-full"
-            />
-          </div>
-        )}
-
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-2">Notes (Optional)</label>
           <Input
@@ -401,8 +320,8 @@ export const GhaatEditModal: React.FC<GhaatEditModalProps> = ({
           <Button type="button" variant="outline" onClick={handleClose} className="flex-1">
             Cancel
           </Button>
-          <Button type="submit" className="flex-1" disabled={isSold}>
-            {isSold ? 'Read Only' : 'Update'}
+          <Button type="submit" className="flex-1">
+            Update
           </Button>
         </div>
       </form>

@@ -215,20 +215,28 @@ export const GhaatSettlement: React.FC = () => {
             <h3 className="text-sm font-semibold text-purple-400 mb-3">Balance with {selectedPartyName}</h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div className="bg-white/5 rounded-lg p-3">
-                <p className="text-xs text-gray-500">Pending Gold</p>
-                <p className="text-sm font-bold text-yellow-400">{merchantBalance.fineGoldPending.toFixed(3)} gm</p>
-              </div>
-              <div className="bg-white/5 rounded-lg p-3">
-                <p className="text-xs text-gray-500">Cash Shortfall</p>
-                <p className="text-sm font-bold text-red-400">{formatCurrency(merchantBalance.cashDue)}</p>
-              </div>
-              <div className="bg-white/5 rounded-lg p-3">
-                <p className="text-xs text-gray-500">Net Cash Due</p>
-                <p className={`text-sm font-bold ${merchantBalance.netCashDue > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                  {formatCurrency(Math.abs(merchantBalance.netCashDue))}
-                  {merchantBalance.netCashDue < 0 ? ' (advance)' : ''}
+                <p className="text-xs text-gray-500">Fine Gold Due</p>
+                <p className={`text-sm font-bold ${merchantBalance.fineGoldDue >= 0 ? 'text-yellow-400' : 'text-emerald-400'}`}>
+                  {merchantBalance.fineGoldDue >= 0
+                    ? `${merchantBalance.fineGoldDue.toFixed(3)} gm`
+                    : `${Math.abs(merchantBalance.fineGoldDue).toFixed(3)} gm (advance)`}
                 </p>
               </div>
+              {merchantBalance.cashDue > 0 && (
+                <div className="bg-white/5 rounded-lg p-3">
+                  <p className="text-xs text-gray-500">Cash Shortfall (legacy)</p>
+                  <p className="text-sm font-bold text-red-400">{formatCurrency(merchantBalance.cashDue)}</p>
+                </div>
+              )}
+              {merchantBalance.netCashDue !== 0 && (
+                <div className="bg-white/5 rounded-lg p-3">
+                  <p className="text-xs text-gray-500">Net Cash Due</p>
+                  <p className={`text-sm font-bold ${merchantBalance.netCashDue > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                    {formatCurrency(Math.abs(merchantBalance.netCashDue))}
+                    {merchantBalance.netCashDue < 0 ? ' (advance)' : ''}
+                  </p>
+                </div>
+              )}
               {merchantBalance.cashSettled > 0 && (
                 <div className="bg-white/5 rounded-lg p-3">
                   <p className="text-xs text-gray-500">Cash Settled</p>
